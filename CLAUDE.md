@@ -28,6 +28,7 @@ streamlit run app.py --server.port 8502
 - **`data/`** — Data fetching layer. Each file wraps one data source. Uses `st.cache_data` for caching.
   - `nse_live.py` — jugaad-data (primary) + nsetools (fallback) for live quotes/indices.
   - `nse_historical.py` — jugaad-data (primary) + yfinance (fallback) for OHLCV.
+  - `fundamentals.py` — yfinance wrapper for company info, financials, balance sheet, cashflow (cached 24h).
   - `cache.py` — Simple TTL cache decorator for non-Streamlit contexts.
 - **`modules/`** — Each Bloomberg function is one module file (m01, m02, ..., m16). Each exposes a `render()` function.
 - **`analytics/`** — Reusable calculation engines (technicals, risk, screener). Not yet built.
@@ -45,4 +46,6 @@ streamlit run app.py --server.port 8502
 
 ## Build Phases
 
-Currently on **Phase 1** (M01 + M02). See plan for Phases 2-5.
+**Phase 1** complete: M01 (Market Overview) + M02 (Watchlist).
+**Phase 2** complete: M03 (Charts) + M04 (Company) + M05 (Financials) + M08 (Heatmap) + M09 (Comparison) + data/fundamentals.py.
+See plan for Phases 3-5.

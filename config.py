@@ -24,6 +24,13 @@ PLOTLY_LAYOUT = dict(
     legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=11)),
 )
 
+
+def plotly_layout(**overrides):
+    """Return PLOTLY_LAYOUT merged with overrides (overrides win on conflict)."""
+    base = dict(PLOTLY_LAYOUT)
+    base.update(overrides)
+    return base
+
 # ── Market hours (IST) ──
 MARKET_OPEN_HOUR = 9
 MARKET_OPEN_MIN = 15

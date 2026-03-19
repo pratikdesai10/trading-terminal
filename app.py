@@ -5,6 +5,7 @@ from datetime import datetime
 import pytz
 
 from theme import apply_theme
+from utils.logger import new_request_id, logger
 
 # ── Page config (must be first Streamlit command) ──
 st.set_page_config(
@@ -16,6 +17,10 @@ st.set_page_config(
 
 # ── Apply Bloomberg dark theme ──
 apply_theme()
+
+# ── Request tracing ──
+rid = new_request_id()
+logger.info(f"PAGE RENDER START | request_id={rid}")
 
 # ── Header ──
 ist = pytz.timezone("Asia/Kolkata")
@@ -40,9 +45,14 @@ st.markdown(
 )
 
 # ── Tab navigation ──
-tab_overview, tab_watchlist = st.tabs([
+tab_overview, tab_watchlist, tab_charts, tab_company, tab_financials, tab_heatmap, tab_comparison = st.tabs([
     "M01 OVERVIEW",
     "M02 WATCHLIST",
+    "M03 CHARTS",
+    "M04 COMPANY",
+    "M05 FINANCIALS",
+    "M08 HEATMAP",
+    "M09 COMPARISON",
 ])
 
 with tab_overview:
@@ -52,3 +62,23 @@ with tab_overview:
 with tab_watchlist:
     from modules.m02_watchlist import render as render_watchlist
     render_watchlist()
+
+with tab_charts:
+    from modules.m03_price_charts import render as render_charts
+    render_charts()
+
+with tab_company:
+    from modules.m04_company_description import render as render_company
+    render_company()
+
+with tab_financials:
+    from modules.m05_financials import render as render_financials
+    render_financials()
+
+with tab_heatmap:
+    from modules.m08_sector_heatmap import render as render_heatmap
+    render_heatmap()
+
+with tab_comparison:
+    from modules.m09_index_comparison import render as render_comparison
+    render_comparison()
