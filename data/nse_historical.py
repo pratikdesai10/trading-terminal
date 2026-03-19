@@ -5,40 +5,40 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
+from utils.logger import logger
+
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_stock_history(symbol, start_date=None, end_date=None):
     """Fetch historical OHLCV data for an NSE stock.
 
-    Args:
-        symbol: NSE symbol (e.g., "RELIANCE").
-        start_date: Start date (default: 1 year ago).
-        end_date: End date (default: today).
-
-    Returns:
-        DataFrame with columns: Date, Open, High, Low, Close, Volume.
+    Returns DataFrame with columns: Date, Open, High, Low, Close, Volume.
     """
     if end_date is None:
         end_date = date.today()
     if start_date is None:
         start_date = end_date - timedelta(days=365)
 
-    # Ensure date types
     if isinstance(start_date, str):
         start_date = date.fromisoformat(start_date)
     if isinstance(end_date, str):
         end_date = date.fromisoformat(end_date)
 
+    logger.info(f"get_stock_history | symbol={symbol} | {start_date} to {end_date}")
+
     # Primary: jugaad-data
     df = _fetch_jugaad(symbol, start_date, end_date)
     if df is not None and not df.empty:
+        logger.info(f"get_stock_history | symbol={symbol} | OK via jugaad-data | {len(df)} rows")
         return df
 
     # Fallback: yfinance
     df = _fetch_yfinance(symbol, start_date, end_date)
     if df is not None and not df.empty:
+        logger.info(f"get_stock_history | symbol={symbol} | OK via yfinance | {len(df)} rows")
         return df
 
+    logger.error(f"get_stock_history | symbol={symbol} | ALL SOURCES FAILED")
     return pd.DataFrame()
 
 
@@ -53,6 +53,7 @@ def _fetch_jugaad(symbol, start_date, end_date):
             series="EQ",
         )
         if df is not None and not df.empty:
+            # jugaad-data column names vary between versions
             df = df.rename(columns={
                 "DATE": "Date",
                 "OPEN": "Open",
@@ -70,11 +71,15 @@ def _fetch_jugaad(symbol, start_date, end_date):
             required = ["Date", "Open", "High", "Low", "Close"]
             if all(col in df.columns for col in required):
                 df["Date"] = pd.to_datetime(df["Date"])
+                if "Volume" not in df.columns:
+                    df["Volume"] = 0
                 df = df[["Date", "Open", "High", "Low", "Close", "Volume"]].sort_values("Date")
                 df = df.reset_index(drop=True)
                 return df
-    except Exception:
-        pass
+            else:
+                logger.warning(f"_fetch_jugaad | {symbol} | missing columns, got: {list(df.columns)}")
+    except Exception as e:
+        logger.warning(f"_fetch_jugaad | {symbol} | {type(e).__name__}: {e}")
     return None
 
 
@@ -86,13 +91,17 @@ def _fetch_yfinance(symbol, start_date, end_date):
         df = ticker.history(start=str(start_date), end=str(end_date))
         if df is not None and not df.empty:
             df = df.reset_index()
-            df = df.rename(columns={"index": "Date"})
             if "Date" in df.columns:
                 df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
-            df = df[["Date", "Open", "High", "Low", "Close", "Volume"]]
-            return df
-    except Exception:
-        pass
+            elif "index" in df.columns:
+                df = df.rename(columns={"index": "Date"})
+                df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
+            if "Volume" not in df.columns:
+                df["Volume"] = 0
+            available = [c for c in ["Date", "Open", "High", "Low", "Close", "Volume"] if c in df.columns]
+            return df[available]
+    except Exception as e:
+        logger.warning(f"_fetch_yfinance | {symbol} | {type(e).__name__}: {e}")
     return None
 
 
@@ -100,13 +109,7 @@ def _fetch_yfinance(symbol, start_date, end_date):
 def get_index_history(index_name, start_date=None, end_date=None):
     """Fetch historical data for an NSE index.
 
-    Args:
-        index_name: Index name (e.g., "NIFTY 50").
-        start_date: Start date (default: 1 year ago).
-        end_date: End date (default: today).
-
-    Returns:
-        DataFrame with columns: Date, Open, High, Low, Close.
+    Returns DataFrame with columns: Date, Open, High, Low, Close.
     """
     if end_date is None:
         end_date = date.today()
@@ -117,6 +120,8 @@ def get_index_history(index_name, start_date=None, end_date=None):
         start_date = date.fromisoformat(start_date)
     if isinstance(end_date, str):
         end_date = date.fromisoformat(end_date)
+
+    logger.info(f"get_index_history | index={index_name} | {start_date} to {end_date}")
 
     # jugaad-data index history
     try:
@@ -138,9 +143,10 @@ def get_index_history(index_name, start_date=None, end_date=None):
                 df["Date"] = pd.to_datetime(df["Date"])
                 cols = [c for c in ["Date", "Open", "High", "Low", "Close"] if c in df.columns]
                 df = df[cols].sort_values("Date").reset_index(drop=True)
+                logger.info(f"get_index_history | index={index_name} | OK via jugaad-data | {len(df)} rows")
                 return df
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"get_index_history | index={index_name} | jugaad-data failed: {type(e).__name__}: {e}")
 
     # yfinance fallback for indices
     yf_map = {
@@ -158,12 +164,16 @@ def get_index_history(index_name, start_date=None, end_date=None):
             df = ticker.history(start=str(start_date), end=str(end_date))
             if df is not None and not df.empty:
                 df = df.reset_index()
-                df = df.rename(columns={"index": "Date"})
                 if "Date" in df.columns:
                     df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
+                elif "index" in df.columns:
+                    df = df.rename(columns={"index": "Date"})
+                    df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
                 cols = [c for c in ["Date", "Open", "High", "Low", "Close", "Volume"] if c in df.columns]
+                logger.info(f"get_index_history | index={index_name} | OK via yfinance | {len(df)} rows")
                 return df[cols]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"get_index_history | index={index_name} | yfinance failed: {type(e).__name__}: {e}")
 
+    logger.error(f"get_index_history | index={index_name} | ALL SOURCES FAILED")
     return pd.DataFrame()
