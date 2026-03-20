@@ -36,30 +36,34 @@ def render():
         )
         return
 
-    # Fetch live prices for all holdings
-    live_data = _fetch_live_prices(holdings)
+    try:
+        # Fetch live prices for all holdings
+        live_data = _fetch_live_prices(holdings)
 
-    # ── Portfolio Summary ──
-    _render_summary(holdings, live_data)
+        # ── Portfolio Summary ──
+        _render_summary(holdings, live_data)
 
-    st.divider()
+        st.divider()
 
-    # ── Holdings Table ──
-    _render_holdings_table(holdings, live_data)
+        # ── Holdings Table ──
+        _render_holdings_table(holdings, live_data)
 
-    st.divider()
+        st.divider()
 
-    # ── Charts row ──
-    col_alloc, col_sector = st.columns(2)
-    with col_alloc:
-        _render_allocation_pie(holdings, live_data)
-    with col_sector:
-        _render_sector_pie(holdings, live_data)
+        # ── Charts row ──
+        col_alloc, col_sector = st.columns(2)
+        with col_alloc:
+            _render_allocation_pie(holdings, live_data)
+        with col_sector:
+            _render_sector_pie(holdings, live_data)
 
-    st.divider()
+        st.divider()
 
-    # ── Daily P&L bar chart ──
-    _render_daily_pnl_chart(holdings, live_data)
+        # ── Daily P&L bar chart ──
+        _render_daily_pnl_chart(holdings, live_data)
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        logger.error(f"m10_portfolio_tracker | {type(e).__name__}: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────

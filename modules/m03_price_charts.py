@@ -9,6 +9,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from config import COLORS, NIFTY_50_SYMBOLS, plotly_layout
+from utils.logger import logger
 
 
 PERIOD_DAYS = {
@@ -55,26 +56,30 @@ def render():
     show_macd = sc_cols[1].checkbox("MACD", key="m03_macd")
 
     # ── Fetch data ──
-    end_date = date.today()
-    start_date = end_date - timedelta(days=PERIOD_DAYS[period])
+    try:
+        end_date = date.today()
+        start_date = end_date - timedelta(days=PERIOD_DAYS[period])
 
-    from data.nse_historical import get_stock_history
-    df = get_stock_history(symbol, start_date, end_date)
+        from data.nse_historical import get_stock_history
+        df = get_stock_history(symbol, start_date, end_date)
 
-    if df is None or df.empty:
-        st.warning(f"No data available for {symbol}")
-        return
+        if df is None or df.empty:
+            st.warning(f"No data available for {symbol}")
+            return
 
-    # ── Build chart ──
-    overlays = {
-        "sma20": show_sma20, "sma50": show_sma50, "sma200": show_sma200,
-        "ema9": show_ema9, "ema21": show_ema21, "bb": show_bb,
-    }
-    fig = _build_chart(df, overlays, show_rsi, show_macd)
-    st.plotly_chart(fig, use_container_width=True)
+        # ── Build chart ──
+        overlays = {
+            "sma20": show_sma20, "sma50": show_sma50, "sma200": show_sma200,
+            "ema9": show_ema9, "ema21": show_ema21, "bb": show_bb,
+        }
+        fig = _build_chart(df, overlays, show_rsi, show_macd)
+        st.plotly_chart(fig, use_container_width=True)
 
-    # ── Summary stats ──
-    _render_summary(df, symbol)
+        # ── Summary stats ──
+        _render_summary(df, symbol)
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        logger.error(f"m03_price_charts | {type(e).__name__}: {e}")
 
 
 def _build_chart(df, overlays, show_rsi, show_macd):

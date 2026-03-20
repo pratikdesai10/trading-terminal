@@ -4,6 +4,7 @@ import streamlit as st
 
 from config import DEFAULT_WATCHLIST, NIFTY_50_SYMBOLS
 from utils.formatting import format_inr, format_volume
+from utils.logger import logger
 
 
 def render():
@@ -47,7 +48,11 @@ def render():
         st.info("Watchlist is empty. Add symbols above.")
         return
 
-    _render_watchlist_table(st.session_state.watchlist)
+    try:
+        _render_watchlist_table(st.session_state.watchlist)
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        logger.error(f"m02_watchlist | {type(e).__name__}: {e}")
 
 
 def _render_watchlist_table(symbols):

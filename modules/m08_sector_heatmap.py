@@ -4,26 +4,31 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from config import COLORS, NIFTY_50, plotly_layout
+from utils.logger import logger
 
 
 def render():
     """Render the Sector Heatmap module."""
     st.markdown("### SECTOR HEATMAP")
 
-    with st.spinner("Loading market data for heatmap..."):
-        data = _fetch_heatmap_data()
+    try:
+        with st.spinner("Loading market data for heatmap..."):
+            data = _fetch_heatmap_data()
 
-    if not data:
-        st.warning("Unable to load heatmap data")
-        return
+        if not data:
+            st.warning("Unable to load heatmap data")
+            return
 
-    loaded = len(data)
-    total = len(NIFTY_50)
+        loaded = len(data)
+        total = len(NIFTY_50)
 
-    fig = _build_treemap(data)
-    st.plotly_chart(fig, use_container_width=True)
+        fig = _build_treemap(data)
+        st.plotly_chart(fig, use_container_width=True)
 
-    st.caption(f"{loaded}/{total} stocks loaded | Sized equally within sectors, colored by daily % change")
+        st.caption(f"{loaded}/{total} stocks loaded | Sized equally within sectors, colored by daily % change")
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        logger.error(f"m08_sector_heatmap | {type(e).__name__}: {e}")
 
 
 def _fetch_heatmap_data():

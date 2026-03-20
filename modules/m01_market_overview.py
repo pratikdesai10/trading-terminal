@@ -4,30 +4,35 @@ import streamlit as st
 
 from config import COLORS
 from utils.formatting import format_inr, format_pct, format_number, colored_text
+from utils.logger import logger
 
 
 def render():
     """Render the Market Overview dashboard."""
     st.markdown("### MARKET OVERVIEW")
 
-    # ── Top bar: Key indices ──
-    _render_key_indices()
+    try:
+        # ── Top bar: Key indices ──
+        _render_key_indices()
 
-    st.markdown("---")
+        st.markdown("---")
 
-    # ── Three-column layout ──
-    col_left, col_mid, col_right = st.columns([1, 1, 1])
+        # ── Three-column layout ──
+        col_left, col_mid, col_right = st.columns([1, 1, 1])
 
-    with col_left:
-        _render_market_breadth()
-        st.markdown("")
-        _render_india_vix()
+        with col_left:
+            _render_market_breadth()
+            st.markdown("")
+            _render_india_vix()
 
-    with col_mid:
-        _render_sectoral_performance()
+        with col_mid:
+            _render_sectoral_performance()
 
-    with col_right:
-        _render_top_movers()
+        with col_right:
+            _render_top_movers()
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        logger.error(f"m01_market_overview | {type(e).__name__}: {e}")
 
 
 def _render_key_indices():
