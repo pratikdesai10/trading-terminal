@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from config import COLORS, NIFTY_50_SYMBOLS, plotly_layout
+from utils.logger import logger
 
 
 # Distinct colors for comparison lines
@@ -40,20 +41,24 @@ def render():
         st.info("Select at least 2 symbols to compare.")
         return
 
-    # ── Fetch data ──
-    with st.spinner("Loading historical data..."):
-        data_dict = _fetch_data(symbols, start_date, end_date)
+    try:
+        # ── Fetch data ──
+        with st.spinner("Loading historical data..."):
+            data_dict = _fetch_data(symbols, start_date, end_date)
 
-    if len(data_dict) < 2:
-        st.warning("Insufficient data for comparison. Some symbols may have no history.")
-        return
+        if len(data_dict) < 2:
+            st.warning("Insufficient data for comparison. Some symbols may have no history.")
+            return
 
-    # ── Charts and stats ──
-    _render_normalized_chart(data_dict)
-    st.markdown("---")
-    _render_stats_table(data_dict)
-    st.markdown("---")
-    _render_correlation_matrix(data_dict)
+        # ── Charts and stats ──
+        _render_normalized_chart(data_dict)
+        st.markdown("---")
+        _render_stats_table(data_dict)
+        st.markdown("---")
+        _render_correlation_matrix(data_dict)
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        logger.error(f"m09_index_comparison | {type(e).__name__}: {e}")
 
 
 def _fetch_data(symbols, start_date, end_date):
