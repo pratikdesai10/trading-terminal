@@ -8,25 +8,16 @@ scipy==1.14.1
 # Indian Market Data (all scrape NSE/RBI — no API key needed)
 jugaad-data==0.31.1
 nsetools==2.0.1
-nsepython==2.97
 
 # Global/Fundamental Data
 yfinance==0.2.54
-pandas-datareader==0.10.0
 
 # Technical Analysis
 ta==0.11.0
 
-# Backtesting
-vectorbt==0.26.2
-backtrader==1.9.78.123
-
-# Portfolio & Risk
-pyportfolioopt==1.5.6
-quantstats==0.0.64
-
 # News & Scraping
 feedparser==6.0.11
-beautifulsoup4==4.12.3
 requests==2.32.3
-textblob==0.18.0
+
+# Timezone
+pytz==2024.2

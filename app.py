@@ -45,14 +45,25 @@ st.markdown(
 )
 
 # ── Tab navigation ──
-tab_overview, tab_watchlist, tab_charts, tab_company, tab_financials, tab_heatmap, tab_comparison = st.tabs([
+(tab_overview, tab_watchlist, tab_charts, tab_company, tab_financials,
+ tab_screener, tab_options, tab_heatmap, tab_comparison, tab_portfolio,
+ tab_backtest, tab_optimizer, tab_economic, tab_fii, tab_news, tab_alerts) = st.tabs([
     "M01 OVERVIEW",
     "M02 WATCHLIST",
     "M03 CHARTS",
     "M04 COMPANY",
     "M05 FINANCIALS",
+    "M06 SCREENER",
+    "M07 OPTIONS",
     "M08 HEATMAP",
     "M09 COMPARISON",
+    "M10 PORTFOLIO",
+    "M11 BACKTEST",
+    "M12 OPTIMIZER",
+    "M13 ECONOMIC",
+    "M14 FII/DII",
+    "M15 NEWS",
+    "M16 ALERTS",
 ])
 
 with tab_overview:
@@ -75,6 +86,14 @@ with tab_financials:
     from modules.m05_financials import render as render_financials
     render_financials()
 
+with tab_screener:
+    from modules.m06_stock_screener import render as render_screener
+    render_screener()
+
+with tab_options:
+    from modules.m07_option_chain import render as render_options
+    render_options()
+
 with tab_heatmap:
     from modules.m08_sector_heatmap import render as render_heatmap
     render_heatmap()
@@ -82,3 +101,31 @@ with tab_heatmap:
 with tab_comparison:
     from modules.m09_index_comparison import render as render_comparison
     render_comparison()
+
+with tab_portfolio:
+    from modules.m10_portfolio_tracker import render as render_portfolio
+    render_portfolio()
+
+with tab_backtest:
+    from modules.m11_backtesting import render as render_backtest
+    render_backtest()
+
+with tab_optimizer:
+    from modules.m12_portfolio_optimizer import render as render_optimizer
+    render_optimizer()
+
+with tab_economic:
+    from modules.m13_economic_dashboard import render as render_economic
+    render_economic()
+
+with tab_fii:
+    from modules.m14_fii_dii_tracker import render as render_fii
+    render_fii()
+
+with tab_news:
+    from modules.m15_news_sentiment import render as render_news
+    render_news()
+
+with tab_alerts:
+    from modules.m16_alerts import render as render_alerts
+    render_alerts()
