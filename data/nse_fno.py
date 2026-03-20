@@ -71,8 +71,12 @@ def _fetch_jugaad(symbol):
             ce = item.get("CE", {})
             pe = item.get("PE", {})
 
-            # expiryDates (plural) on the item level, e.g. "24-Mar-2026"
-            item_expiry = item.get("expiryDates", "") or item.get("expiryDate", "")
+            # NSE response uses "expiryDate" (string) on each item
+            # but sometimes has "expiryDates" (can be a list) — normalize to string
+            item_expiry = item.get("expiryDate", "")
+            if not item_expiry:
+                raw = item.get("expiryDates", "")
+                item_expiry = raw[0] if isinstance(raw, list) and raw else str(raw) if raw else ""
 
             records.append({
                 "strikePrice": strike,

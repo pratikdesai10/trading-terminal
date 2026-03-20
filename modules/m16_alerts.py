@@ -72,7 +72,7 @@ def _render_add_alert():
         unsafe_allow_html=True,
     )
 
-    c_sym, c_cond, c_val, c_btn = st.columns([2, 2, 1, 1])
+    c_sym, c_ltp, c_cond, c_val, c_btn = st.columns([2, 1, 2, 1, 1])
 
     with c_sym:
         symbol = st.selectbox(
@@ -82,6 +82,30 @@ def _render_add_alert():
             key="m16_symbol",
             label_visibility="collapsed",
         )
+
+    # Show current LTP for the selected symbol
+    with c_ltp:
+        from data.nse_live import get_stock_quote
+        _quote = get_stock_quote(symbol)
+        if _quote:
+            _ltp = _quote["lastPrice"]
+            _pchg = _quote["pChange"]
+            _chg_color = COLORS["green"] if _pchg >= 0 else COLORS["red"]
+            st.markdown(
+                f'<div style="text-align:center;padding:4px 0">'
+                f'<div style="color:{COLORS["muted"]};font-size:9px">LTP</div>'
+                f'<div style="color:{COLORS["text"]};font-size:14px;font-weight:bold">'
+                f'{format_inr(_ltp)}</div>'
+                f'<div style="color:{_chg_color};font-size:10px">{_pchg:+.2f}%</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f'<div style="text-align:center;padding:4px 0;color:{COLORS["muted"]};'
+                f'font-size:11px">LTP: —</div>',
+                unsafe_allow_html=True,
+            )
 
     with c_cond:
         condition = st.selectbox(
@@ -93,7 +117,8 @@ def _render_add_alert():
         )
 
     with c_val:
-        # Show appropriate placeholder/help based on condition
+        # Default value based on LTP if available
+        default_price = round(_quote["lastPrice"], 2) if _quote else 100.0
         if condition in ("pct_change_above", "pct_change_below"):
             value = st.number_input(
                 "VALUE (%)",
@@ -108,7 +133,7 @@ def _render_add_alert():
             value = st.number_input(
                 "VALUE (₹)",
                 min_value=0.01,
-                value=100.0,
+                value=default_price,
                 step=1.0,
                 format="%.2f",
                 key="m16_value",

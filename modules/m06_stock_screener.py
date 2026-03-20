@@ -84,8 +84,11 @@ def render():
         if df is None or df.empty:
             return
 
-        # Apply filters
+        # Apply filters (fill NaN with 0 for numeric comparisons)
         filtered = df.copy()
+        for col in ["P/E", "P/B", "ROE (%)", "D/E", "Div Yield (%)"]:
+            if col in filtered.columns:
+                filtered[col] = pd.to_numeric(filtered[col], errors="coerce").fillna(0.0)
         if pe_range != (0.0, 200.0):
             filtered = filtered[(filtered["P/E"] >= pe_range[0]) & (filtered["P/E"] <= pe_range[1])]
         if pb_range != (0.0, 50.0):
@@ -148,9 +151,12 @@ def _render_results_table(df):
             "ROE (%)", "D/E", "Div Yield (%)", "EPS", "Beta"]
     display_cols = [c for c in cols if c in df.columns]
 
-    header = "".join(f'<th style="color:{COLORS["amber"]};padding:4px 8px;text-align:right;'
-                     f'border-bottom:1px solid {COLORS["border"]};font-size:11px">{c}</th>'
-                     for c in display_cols)
+    header = "".join(
+        f'<th style="color:{COLORS["amber"]};padding:4px 8px;'
+        f'text-align:{"left" if c in ("Symbol", "Sector") else "right"};'
+        f'border-bottom:1px solid {COLORS["border"]};font-size:11px">{c}</th>'
+        for c in display_cols
+    )
 
     rows = ""
     for _, row in df.iterrows():
