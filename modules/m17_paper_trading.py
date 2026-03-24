@@ -6,7 +6,7 @@ import pytz
 import streamlit as st
 
 from config import COLORS, NIFTY_200_SYMBOLS
-from data.database import PAPERPAPER_DEFAULT_BALANCE
+from data.database import PAPER_DEFAULT_BALANCE
 from utils.formatting import format_inr, color_change
 from utils.logger import logger
 
