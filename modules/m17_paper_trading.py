@@ -5,15 +5,14 @@ from datetime import datetime
 import pytz
 import streamlit as st
 
-from config import COLORS, NIFTY_200_SYMBOLS, plotly_layout
+from config import COLORS, NIFTY_200_SYMBOLS
+from data.database import PAPERPAPER_DEFAULT_BALANCE
 from utils.formatting import format_inr, color_change
 from utils.logger import logger
 
 # ── Session state keys ──
 _BAL_KEY = "paper_balance"
 _ORD_KEY = "paper_orders"
-
-_DEFAULT_BALANCE = 1_000_000.0
 
 
 def render():
@@ -288,7 +287,7 @@ def _render_summary():
     unrealized_pnl = current_value - invested
     total_pnl = realized_pnl + unrealized_pnl
     portfolio_value = balance + current_value
-    total_return_pct = (portfolio_value / _DEFAULT_BALANCE - 1) * 100
+    total_return_pct = (portfolio_value / PAPER_DEFAULT_BALANCE - 1) * 100
 
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     _metric_card(c1, "CASH BALANCE", format_inr(balance), COLORS["text"])
@@ -571,7 +570,7 @@ def _render_controls():
         if st.button("RESET PAPER PORTFOLIO", use_container_width=True, key="m17_reset_btn"):
             from data.database import clear_paper_trading
             clear_paper_trading()
-            st.session_state[_BAL_KEY] = _DEFAULT_BALANCE
+            st.session_state[_BAL_KEY] = PAPER_DEFAULT_BALANCE
             st.session_state[_ORD_KEY] = []
             logger.info("m17_paper | RESET")
             st.toast("Paper portfolio reset.", icon="🔄")

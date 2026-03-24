@@ -18,9 +18,11 @@ st.set_page_config(
 # ── Apply Bloomberg dark theme ──
 apply_theme()
 
-# ── Initialize database ──
-from data.database import init_db
-init_db()
+# ── Initialize database (once per session) ──
+if "db_initialized" not in st.session_state:
+    from data.database import init_db
+    init_db()
+    st.session_state.db_initialized = True
 
 # ── Request tracing ──
 rid = new_request_id()

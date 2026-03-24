@@ -135,20 +135,27 @@ def _render_controls():
             if uploaded is not None:
                 try:
                     data = json.loads(uploaded.read())
-                    if isinstance(data, list):
-                        from data.database import replace_all_holdings
-                        replace_all_holdings(data)
-                        # Reload from DB to get _db_id values
-                        from data.database import load_holdings
-                        st.session_state[_STATE_KEY] = load_holdings()
-                        logger.info(
-                            f"m10_portfolio | IMPORT | {len(data)} holdings loaded"
-                        )
-                        st.rerun()
-                    else:
+                    if not isinstance(data, list):
                         st.error("JSON must be a list of holdings")
-                except json.JSONDecodeError:
-                    st.error("Invalid JSON file")
+                    else:
+                        required = {"symbol", "qty", "avg_price", "buy_date"}
+                        invalid = [
+                            i for i, h in enumerate(data)
+                            if not isinstance(h, dict) or not required.issubset(h)
+                        ]
+                        if invalid:
+                            st.error(f"Invalid holdings at indices: {invalid[:5]}. Each must have: {', '.join(sorted(required))}")
+                        else:
+                            from data.database import replace_all_holdings
+                            replace_all_holdings(data)
+                            from data.database import load_holdings
+                            st.session_state[_STATE_KEY] = load_holdings()
+                            logger.info(
+                                f"m10_portfolio | IMPORT | {len(data)} holdings loaded"
+                            )
+                            st.rerun()
+                except (json.JSONDecodeError, Exception) as e:
+                    st.error(f"Import failed: {e}")
 
         with io_c2:
             if st.session_state[_STATE_KEY]:
