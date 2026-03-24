@@ -214,6 +214,55 @@ def _fetch_live_prices(holdings):
 
 
 # ─────────────────────────────────────────────────────────────────────
+# XIRR Calculation
+# ─────────────────────────────────────────────────────────────────────
+def _compute_xirr(holdings, live_data):
+    """Compute XIRR (Extended Internal Rate of Return) using scipy.optimize.
+
+    XIRR solves for r in: sum(cashflow_i / (1+r)^((date_i - date_0)/365)) = 0
+    """
+    from scipy.optimize import brentq
+    from datetime import date as date_type
+
+    cashflows = []
+    dates = []
+
+    for h in holdings:
+        # Negative cashflow = money invested (buy)
+        cashflows.append(-h["qty"] * h["avg_price"])
+        buy_date = h.get("buy_date")
+        if isinstance(buy_date, str):
+            buy_date = date_type.fromisoformat(buy_date)
+        dates.append(buy_date)
+
+    # Positive cashflow = current value (as if selling today)
+    total_current = 0.0
+    for h in holdings:
+        ld = live_data.get(h["symbol"])
+        ltp = ld["ltp"] if ld else h["avg_price"]
+        total_current += h["qty"] * ltp
+
+    cashflows.append(total_current)
+    dates.append(date_type.today())
+
+    if not cashflows or len(cashflows) < 2:
+        return None
+
+    # Reference date
+    d0 = min(dates)
+    day_fractions = [(d - d0).days / 365.0 for d in dates]
+
+    def npv(rate):
+        return sum(cf / (1 + rate) ** t for cf, t in zip(cashflows, day_fractions))
+
+    try:
+        xirr = brentq(npv, -0.99, 10.0, maxiter=1000)
+        return xirr
+    except (ValueError, RuntimeError):
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Portfolio Summary
 # ─────────────────────────────────────────────────────────────────────
 def _render_summary(holdings, live_data):
@@ -241,7 +290,9 @@ def _render_summary(holdings, live_data):
     total_pnl_pct = (total_pnl / total_invested * 100) if total_invested else 0
     day_pnl_pct = (day_pnl / (current_value - day_pnl) * 100) if (current_value - day_pnl) else 0
 
-    c1, c2, c3, c4, c5 = st.columns(5)
+    xirr = _compute_xirr(holdings, live_data)
+
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     _metric_card(c1, "TOTAL INVESTED", format_inr(total_invested), COLORS["text"])
     _metric_card(c2, "CURRENT VALUE", format_inr(current_value), COLORS["amber"])
     _metric_card(
@@ -249,12 +300,19 @@ def _render_summary(holdings, live_data):
         f"{format_inr(total_pnl)} ({total_pnl_pct:+.2f}%)",
         color_change(total_pnl),
     )
+    if xirr is not None:
+        xirr_display = f"{xirr * 100:+.2f}%"
+        xirr_color = color_change(xirr)
+    else:
+        xirr_display = "\u2014"
+        xirr_color = COLORS["muted"]
+    _metric_card(c4, "XIRR", xirr_display, xirr_color)
     _metric_card(
-        c4, "DAY'S P&L",
+        c5, "DAY'S P&L",
         f"{format_inr(day_pnl)} ({day_pnl_pct:+.2f}%)",
         color_change(day_pnl),
     )
-    _metric_card(c5, "HOLDINGS", str(len(holdings)), COLORS["amber"])
+    _metric_card(c6, "HOLDINGS", str(len(holdings)), COLORS["amber"])
 
 
 def _metric_card(col, label, value, value_color):

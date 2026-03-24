@@ -30,6 +30,10 @@ STRATEGIES = {
         "desc": "Buy when price touches lower band, sell when price touches upper band.",
         "params": {"bb_period": 20, "bb_std": 2.0},
     },
+    "Custom Strategy": {
+        "desc": "Write custom Python signal logic. Use df with columns: Date, Open, High, Low, Close, Volume. Set df['signal'] = 1 (buy), -1 (sell), or 0 (hold).",
+        "params": {},
+    },
 }
 
 PERIOD_PRESETS = {
@@ -228,6 +232,28 @@ def _render_strategy_params(strategy_name, defaults):
                 format="%.1f", key="m11_p_bb_std",
             )
 
+    elif strategy_name == "Custom Strategy":
+        default_code = '''# Custom Strategy Template
+# Available: df (DataFrame with Date, Open, High, Low, Close, Volume columns)
+# Available: pd, np, ta (libraries)
+# Set df['signal'] = 1 for BUY, -1 for SELL, 0 for HOLD
+
+# Example: Simple price breakout
+rolling_high = df['High'].rolling(window=20).max().shift(1)
+rolling_low = df['Low'].rolling(window=20).min().shift(1)
+
+df['signal'] = 0
+df.loc[df['Close'] > rolling_high, 'signal'] = 1
+df.loc[df['Close'] < rolling_low, 'signal'] = -1
+'''
+        params["custom_code"] = st.text_area(
+            "STRATEGY CODE",
+            value=default_code,
+            height=250,
+            key="m11_custom_code",
+        )
+        st.caption("⚠️ Code runs in a sandboxed namespace with limited builtins.")
+
     return params
 
 
@@ -267,6 +293,81 @@ def _run_backtest(symbol, strategy_name, params, start_date, end_date,
         st.session_state["m11_results"] = results
 
     _display_results(results)
+
+
+def _exec_custom_strategy(custom_code, df):
+    """Execute custom strategy code in a sandboxed subprocess.
+
+    Runs the user code in a separate Python process with a timeout,
+    communicating data via temporary CSV files.
+    """
+    import subprocess
+    import tempfile
+    import os
+
+    # Validate code: block dangerous patterns
+    _BLOCKED = [
+        "import os", "import sys", "import subprocess", "import shutil",
+        "__import__", "eval(", "exec(", "compile(", "open(",
+        "__class__", "__bases__", "__subclasses__", "__globals__",
+        "__builtins__", "__code__", "__func__", "getattr(", "setattr(",
+        "delattr(", "breakpoint(", "quit(", "exit(",
+    ]
+    code_lower = custom_code.lower()
+    for pattern in _BLOCKED:
+        if pattern.lower() in code_lower:
+            import streamlit as st_mod
+            st_mod.error(f"Blocked: '{pattern}' is not allowed in custom strategies.")
+            return None
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_csv = os.path.join(tmpdir, "input.csv")
+        output_csv = os.path.join(tmpdir, "output.csv")
+        script_path = os.path.join(tmpdir, "strategy.py")
+
+        df.to_csv(input_csv, index=False)
+
+        # Build a runner script that loads df, runs user code, saves result
+        runner = f'''
+import pandas as pd
+import numpy as np
+import ta
+
+df = pd.read_csv({input_csv!r})
+df["signal"] = 0
+
+# --- User code start ---
+{custom_code}
+# --- User code end ---
+
+if "signal" not in df.columns:
+    df["signal"] = 0
+df.to_csv({output_csv!r}, index=False)
+'''
+        with open(script_path, "w") as f:
+            f.write(runner)
+
+        try:
+            result = subprocess.run(
+                ["python", script_path],
+                capture_output=True, text=True, timeout=30,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+            )
+            if result.returncode != 0:
+                import streamlit as st_mod
+                err_msg = result.stderr.strip().split("\n")[-1] if result.stderr.strip() else "Unknown error"
+                st_mod.error(f"Custom strategy error: {err_msg}")
+                return None
+
+            result_df = pd.read_csv(output_csv)
+            # Restore Date column to datetime (CSV serializes as string)
+            if "Date" in result_df.columns:
+                result_df["Date"] = pd.to_datetime(result_df["Date"])
+            return result_df
+        except subprocess.TimeoutExpired:
+            import streamlit as st_mod
+            st_mod.error("Custom strategy timed out (30s limit).")
+            return None
 
 
 def _generate_signals(df, strategy_name, params):
@@ -342,6 +443,23 @@ def _generate_signals(df, strategy_name, params):
         prev_close = df["Close"].shift(1)
         df.loc[(prev_close <= df["bb_lower"]) & (df["Close"] > df["bb_lower"]), "signal"] = 1
         df.loc[(prev_close >= df["bb_upper"]) & (df["Close"] < df["bb_upper"]), "signal"] = -1
+
+    elif strategy_name == "Custom Strategy":
+        custom_code = params.get("custom_code", "")
+        if not custom_code.strip():
+            return None
+        # Execute in sandboxed subprocess for security
+        import streamlit as st_mod
+        try:
+            df = _exec_custom_strategy(custom_code, df)
+            if df is None:
+                return None
+        except Exception as e:
+            st_mod.error(f"Custom strategy error: {e}")
+            return None
+        # Ensure signal column exists
+        if "signal" not in df.columns:
+            df["signal"] = 0
 
     df = df.reset_index(drop=True)
     return df

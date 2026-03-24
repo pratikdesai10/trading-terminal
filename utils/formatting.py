@@ -13,9 +13,11 @@ def format_inr(value, decimals=2):
     negative = value < 0
     value = abs(value)
 
-    # Split integer and decimal parts
-    int_part = int(value)
-    dec_part = f".{round(value % 1 * (10 ** decimals)):0{decimals}d}" if decimals > 0 else ""
+    # Split integer and decimal parts using string formatting for precision
+    formatted = f"{value:.{decimals}f}"
+    int_str, _, dec_str = formatted.partition(".")
+    int_part = int(int_str)
+    dec_part = f".{dec_str}" if decimals > 0 else ""
 
     # Indian grouping: last 3 digits, then groups of 2
     s = str(int_part)
@@ -126,3 +128,17 @@ def colored_text(text, value):
     """Wrap text in a colored span based on value sign."""
     c = color_change(value)
     return f'<span style="color:{c};font-family:monospace">{text}</span>'
+
+
+def escape_html(text):
+    """Escape HTML special characters to prevent XSS."""
+    if not isinstance(text, str):
+        text = str(text)
+    return (
+        text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )

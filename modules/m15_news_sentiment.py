@@ -202,13 +202,14 @@ def _parse_published(entry):
 
 
 def _score_sentiment(title):
-    """Score sentiment of a headline using keyword matching.
+    """Score sentiment of a headline using word-boundary matching.
 
     Returns 'Positive', 'Negative', or 'Neutral'.
     """
+    import re
     lower = title.lower()
-    pos = sum(1 for w in POSITIVE_WORDS if w in lower)
-    neg = sum(1 for w in NEGATIVE_WORDS if w in lower)
+    pos = sum(1 for w in POSITIVE_WORDS if re.search(r'\b' + re.escape(w) + r'\b', lower))
+    neg = sum(1 for w in NEGATIVE_WORDS if re.search(r'\b' + re.escape(w) + r'\b', lower))
 
     if pos > neg:
         return "Positive"

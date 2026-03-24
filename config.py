@@ -26,9 +26,14 @@ PLOTLY_LAYOUT = dict(
 
 
 def plotly_layout(**overrides):
-    """Return PLOTLY_LAYOUT merged with overrides (overrides win on conflict)."""
-    base = dict(PLOTLY_LAYOUT)
-    base.update(overrides)
+    """Return PLOTLY_LAYOUT deep-merged with overrides (overrides win on conflict)."""
+    import copy
+    base = copy.deepcopy(dict(PLOTLY_LAYOUT))
+    for key, val in overrides.items():
+        if key in base and isinstance(base[key], dict) and isinstance(val, dict):
+            base[key] = {**base[key], **val}
+        else:
+            base[key] = val
     return base
 
 # ── Market hours (IST) ──
@@ -93,6 +98,50 @@ NIFTY_50 = {
 }
 
 NIFTY_50_SYMBOLS = list(NIFTY_50.keys())
+
+# ── Nifty Next 50 (additional stocks beyond Nifty 50) ──
+NIFTY_NEXT_50 = [
+    "ABB", "ADANIENSOL", "ADANIGREEN", "ADANIPOWER", "ATGL",
+    "AMBUJACEM", "DMART", "BAJAJHLDNG", "BANKBARODA", "BERGEPAINT",
+    "BOSCHLTD", "CANBK", "CHOLAFIN", "COLPAL", "DLF",
+    "DABUR", "DIVISLAB", "GAIL", "GODREJCP", "HAVELLS",
+    "HAL", "ICICIPRULI", "INDIGO", "IOC", "IRCTC",
+    "IRFC", "JINDALSTEL", "JIOFIN", "LICI", "LODHA",
+    "MARICO", "MOTHERSON", "NHPC", "NAUKRI", "PIIND",
+    "PFC", "PIDILITIND", "PNB", "RECLTD", "SBICARD",
+    "SIEMENS", "SRF", "TATAPOWER", "TORNTPHARM", "TVSMOTOR",
+    "UNIONBANK", "UNITDSPR", "VBL", "VEDL", "ZOMATO",
+]
+
+NIFTY_100_SYMBOLS = NIFTY_50_SYMBOLS + NIFTY_NEXT_50
+
+# ── Nifty 200 additional symbols ──
+NIFTY_200_EXTRA = [
+    "ACC", "ALKEM", "APLAPOLLO", "ASHOKLEY", "ASTRAL",
+    "ATUL", "AUBANK", "AUROPHARMA", "BALKRISIND", "BANDHANBNK",
+    "BHARATFORG", "BHEL", "BIOCON", "CANFINHOME", "CGPOWER",
+    "CHAMBLFERT", "CONCOR", "COROMANDEL", "CROMPTON", "CUB",
+    "CUMMINSIND", "DEEPAKNTR", "DELTACORP", "DIXON", "ESCORTS",
+    "EXIDEIND", "FEDERALBNK", "FORTIS", "GLENMARK", "GMRINFRA",
+    "GNFC", "GSPL", "GUJGASLTD", "HDFCAMC", "HINDPETRO",
+    "HONAUT", "IDFCFIRSTB", "IEX", "IIFL", "INDUSTOWER",
+    "IPCA", "JKCEMENT", "JSWENERGY", "JUBLFOOD", "KPITTECH",
+    "L&TFH", "LAURUSLABS", "LICHSGFIN", "LTTS", "LUPIN",
+    "M&MFIN", "MANAPPURAM", "MFSL", "MGL", "MINDTREE",
+    "MPHASIS", "MUTHOOTFIN", "NAM-INDIA", "NATIONALUM", "NAVINFLUOR",
+    "NMDC", "OBEROIRLTY", "OFSS", "PAGEIND", "PERSISTENT",
+    "PETRONET", "POLYCAB", "PRESTIGE", "PVRINOX", "RAJESHEXPO",
+    "RAMCOCEM", "RBLBANK", "SAIL", "SBILIFE", "SHREECEM",
+    "SONACOMS", "STAR", "SUNDARMFIN", "SUNPHARMA", "SUNTV",
+    "SYNGENE", "TATACHEM", "TATACOMM", "TATAELXSI", "TECHM",
+    "THERMAX", "TITAN", "TORNTPOWER", "TRENT", "TRIDENT",
+    "UBL", "ULTRACEMCO", "UPL", "VOLTAS", "WIPRO",
+    "ZEEL", "ZYDUSLIFE",
+]
+
+# Deduplicate: remove symbols already in NIFTY_100
+_nifty_100_set = set(NIFTY_100_SYMBOLS)
+NIFTY_200_SYMBOLS = NIFTY_100_SYMBOLS + [s for s in NIFTY_200_EXTRA if s not in _nifty_100_set]
 
 # ── Sector colors for charts ──
 SECTOR_COLORS = {
