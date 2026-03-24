@@ -3,13 +3,25 @@
 import pandas as pd
 import streamlit as st
 
-from config import COLORS, NIFTY_50
+from config import COLORS, NIFTY_50, NIFTY_50_SYMBOLS, NIFTY_100_SYMBOLS, NIFTY_200_SYMBOLS
 from utils.logger import logger
 
 
 def render():
     """Render the Stock Screener module."""
     st.markdown("### STOCK SCREENER")
+
+    # ── Universe selector ──
+    col_univ, _ = st.columns([2, 4])
+    with col_univ:
+        st.markdown(
+            f'<p style="color:{COLORS["amber"]};font-size:12px;margin-bottom:2px">UNIVERSE</p>',
+            unsafe_allow_html=True,
+        )
+        universe = st.selectbox(
+            "UNIVERSE", ["Nifty 50", "Nifty 100", "Nifty 200"],
+            index=0, key="m06_universe", label_visibility="collapsed",
+        )
 
     # ── Filters ──
     sectors = sorted(set(NIFTY_50.values()))
@@ -57,11 +69,42 @@ def render():
         )
         min_div = st.number_input("MIN DIV YIELD (%)", value=0.0, step=0.1, label_visibility="collapsed")
 
+    col_revg, col_rsi, col_52w = st.columns(3)
+    with col_revg:
+        st.markdown(
+            f'<p style="color:{COLORS["amber"]};font-size:12px;margin-bottom:2px">REVENUE GROWTH (%)</p>',
+            unsafe_allow_html=True,
+        )
+        rev_growth_range = st.slider(
+            "REVENUE GROWTH (%)", -100.0, 200.0, (-100.0, 200.0),
+            label_visibility="collapsed",
+        )
+    with col_rsi:
+        st.markdown(
+            f'<p style="color:{COLORS["amber"]};font-size:12px;margin-bottom:2px">RSI (14)</p>',
+            unsafe_allow_html=True,
+        )
+        rsi_range = st.slider(
+            "RSI (14)", 0.0, 100.0, (0.0, 100.0),
+            label_visibility="collapsed",
+        )
+    with col_52w:
+        st.markdown(
+            f'<p style="color:{COLORS["amber"]};font-size:12px;margin-bottom:2px">52W PROXIMITY (% OF HIGH)</p>',
+            unsafe_allow_html=True,
+        )
+        min_52w_prox = st.slider(
+            "52W PROXIMITY (%)", 0, 100, 0,
+            help="Show stocks within N% of 52-week high",
+            label_visibility="collapsed",
+        )
+
     col_sort, col_run = st.columns([3, 1])
     with col_sort:
         sort_by = st.selectbox(
             "SORT BY",
-            ["Mkt Cap (Cr)", "P/E", "P/B", "ROE (%)", "D/E", "Div Yield (%)", "Price", "Beta"],
+            ["Mkt Cap (Cr)", "P/E", "P/B", "ROE (%)", "D/E", "Div Yield (%)",
+             "Price", "Beta", "Rev Growth (%)", "RSI", "52W Prox (%)"],
         )
     with col_run:
         st.markdown("<br>", unsafe_allow_html=True)
@@ -72,8 +115,11 @@ def render():
     # ── Run screener ──
     if run_btn or "screener_results" in st.session_state:
         if run_btn:
-            with st.spinner("Fetching fundamentals for Nifty 50..."):
-                data = _fetch_screener_data(selected_sectors)
+            with st.spinner(f"Fetching fundamentals for {universe}..."):
+                data = _fetch_screener_data(
+                    universe=universe,
+                    selected_sectors_tuple=tuple(selected_sectors) if selected_sectors else None,
+                )
             if data is not None and not data.empty:
                 st.session_state["screener_results"] = data
             else:
@@ -86,7 +132,8 @@ def render():
 
         # Apply filters (fill NaN with 0 for numeric comparisons)
         filtered = df.copy()
-        for col in ["P/E", "P/B", "ROE (%)", "D/E", "Div Yield (%)"]:
+        for col in ["P/E", "P/B", "ROE (%)", "D/E", "Div Yield (%)", "Rev Growth (%)",
+                     "RSI", "52W Prox (%)"]:
             if col in filtered.columns:
                 filtered[col] = pd.to_numeric(filtered[col], errors="coerce").fillna(0.0)
         if pe_range != (0.0, 200.0):
@@ -99,6 +146,17 @@ def render():
             filtered = filtered[filtered["D/E"] <= max_de]
         if min_div > 0:
             filtered = filtered[filtered["Div Yield (%)"] >= min_div]
+        if rev_growth_range != (-100.0, 200.0):
+            filtered = filtered[
+                (filtered["Rev Growth (%)"] >= rev_growth_range[0])
+                & (filtered["Rev Growth (%)"] <= rev_growth_range[1])
+            ]
+        if rsi_range != (0.0, 100.0):
+            filtered = filtered[
+                (filtered["RSI"] >= rsi_range[0]) & (filtered["RSI"] <= rsi_range[1])
+            ]
+        if min_52w_prox > 0:
+            filtered = filtered[filtered["52W Prox (%)"] >= min_52w_prox]
 
         # Sort
         ascending = sort_by in ["P/E", "P/B", "D/E", "Beta"]
@@ -121,34 +179,97 @@ def render():
         csv = filtered.to_csv(index=False)
         st.download_button("📥 EXPORT CSV", csv, "screener_results.csv", "text/csv")
     else:
-        st.info("Configure filters above and click **RUN SCREENER** to scan Nifty 50 stocks.")
+        st.info("Configure filters above and click **RUN SCREENER** to scan stocks.")
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _fetch_screener_data(selected_sectors_tuple=None):
-    """Fetch fundamental data for Nifty 50 via yfinance."""
+def _fetch_screener_data(universe="Nifty 50", selected_sectors_tuple=None):
+    """Fetch fundamental data for the selected universe via yfinance."""
     from analytics.screener_engine import fetch_screener_data
+
+    # Resolve symbol list based on universe
+    if universe == "Nifty 200":
+        all_symbols = NIFTY_200_SYMBOLS
+    elif universe == "Nifty 100":
+        all_symbols = NIFTY_100_SYMBOLS
+    else:
+        all_symbols = NIFTY_50_SYMBOLS
+
+    # Build sector dict — NIFTY_50 has known mappings; others get empty string
+    sector_map = {s: NIFTY_50.get(s, "") for s in all_symbols}
 
     # Filter symbols by sector if needed
     if selected_sectors_tuple:
-        symbols = [s for s, sec in NIFTY_50.items() if sec in selected_sectors_tuple]
+        symbols = [s for s in all_symbols if sector_map.get(s, "") in selected_sectors_tuple]
     else:
-        symbols = list(NIFTY_50.keys())
+        symbols = list(all_symbols)
 
     if not symbols:
         return pd.DataFrame()
 
-    logger.info(f"m06_screener | fetching {len(symbols)} symbols")
-    records = fetch_screener_data(symbols, NIFTY_50)
-    if records:
-        return pd.DataFrame(records)
-    return pd.DataFrame()
+    logger.info(f"m06_screener | fetching {len(symbols)} symbols ({universe})")
+    records = fetch_screener_data(symbols, sector_map)
+
+    if not records:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(records)
+
+    # ── Compute 52W Proximity (%) ──
+    if "52W High" in df.columns and "Price" in df.columns:
+        high = pd.to_numeric(df["52W High"], errors="coerce")
+        price = pd.to_numeric(df["Price"], errors="coerce")
+        df["52W Prox (%)"] = (price / high * 100).round(1).fillna(0.0)
+    else:
+        df["52W Prox (%)"] = 0.0
+
+    # ── Compute RSI (14) from recent price data (batch download) ──
+    df["RSI"] = 0.0
+    try:
+        import yfinance as yf
+        from datetime import datetime, timedelta
+        from ta.momentum import RSIIndicator
+
+        end = datetime.now()
+        start = end - timedelta(days=40)  # ~30 trading days
+        tickers_ns = [f"{s}.NS" for s in df["Symbol"].tolist()]
+
+        try:
+            batch = yf.download(
+                tickers_ns,
+                start=start.strftime("%Y-%m-%d"),
+                end=end.strftime("%Y-%m-%d"),
+                progress=False,
+                threads=True,
+            )
+            if batch is not None and not batch.empty:
+                close_data = batch["Close"] if "Close" in batch.columns else batch.get("Adj Close")
+                if close_data is not None:
+                    for idx, row in df.iterrows():
+                        ticker_ns = f"{row['Symbol']}.NS"
+                        try:
+                            if ticker_ns in close_data.columns:
+                                series = close_data[ticker_ns].dropna()
+                            else:
+                                continue
+                            if len(series) >= 15:
+                                rsi_val = RSIIndicator(series, window=14).rsi().iloc[-1]
+                                df.at[idx, "RSI"] = round(rsi_val, 1) if pd.notna(rsi_val) else 0.0
+                        except Exception:
+                            pass  # leave as 0.0
+        except Exception:
+            logger.warning("m06_screener | batch RSI download failed")
+    except ImportError:
+        logger.warning("m06_screener | yfinance/ta not available for RSI calc")
+
+    return df
 
 
 def _render_results_table(df):
     """Render screener results as a styled HTML table."""
     cols = ["Symbol", "Sector", "Price", "Mkt Cap (Cr)", "P/E", "P/B",
-            "ROE (%)", "D/E", "Div Yield (%)", "EPS", "Beta"]
+            "ROE (%)", "D/E", "Div Yield (%)", "Rev Growth (%)", "RSI",
+            "52W Prox (%)", "EPS", "Beta"]
     display_cols = [c for c in cols if c in df.columns]
 
     header = "".join(

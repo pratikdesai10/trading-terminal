@@ -67,6 +67,16 @@ def render():
     # ── OI Charts ──
     _render_oi_chart(records, underlying, max_pain)
 
+    st.divider()
+
+    # ── OI Buildup Analysis ──
+    _render_oi_buildup(records, underlying)
+
+    st.divider()
+
+    # ── Straddle Premium Chart ──
+    _render_straddle_chart(records, underlying)
+
 
 def _metric(col, label, value):
     """Render a compact metric."""
@@ -207,4 +217,167 @@ def _render_oi_chart(records, underlying, max_pain):
     ))
 
     st.markdown("##### OI BY STRIKE")
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def _classify_ce_buildup(chg_oi, strike, underlying):
+    """Classify Call OI buildup based on OI change and moneyness."""
+    itm = strike < underlying  # Call is ITM when strike < spot
+    if chg_oi > 0:
+        return ("Long Buildup", COLORS["green"]) if itm else ("Short Buildup", COLORS["red"])
+    elif chg_oi < 0:
+        return ("Short Covering", COLORS["amber"]) if not itm else ("Long Unwinding", COLORS["muted"])
+    return ("Neutral", COLORS["muted"])
+
+
+def _classify_pe_buildup(chg_oi, strike, underlying):
+    """Classify Put OI buildup based on OI change and moneyness."""
+    itm = strike > underlying  # Put is ITM when strike > spot
+    if chg_oi > 0:
+        return ("Long Buildup", COLORS["green"]) if itm else ("Short Buildup", COLORS["red"])
+    elif chg_oi < 0:
+        return ("Short Covering", COLORS["amber"]) if not itm else ("Long Unwinding", COLORS["muted"])
+    return ("Neutral", COLORS["muted"])
+
+
+def _render_oi_buildup(records, underlying):
+    """Render OI Buildup Analysis table — classifies each strike's OI activity."""
+    if not records or not underlying:
+        return
+
+    sorted_records = sorted(records, key=lambda r: r["strikePrice"])
+    atm_idx = min(range(len(sorted_records)),
+                  key=lambda i: abs(sorted_records[i]["strikePrice"] - underlying))
+    start = max(0, atm_idx - 10)
+    end = min(len(sorted_records), atm_idx + 11)
+    near_atm = sorted_records[start:end]
+
+    if not near_atm:
+        return
+
+    st.markdown("##### OI BUILDUP ANALYSIS")
+
+    header = (
+        '<tr>'
+        f'<th style="color:{COLORS["amber"]};padding:4px 8px;font-size:10px;text-align:center;'
+        f'border-bottom:1px solid {COLORS["border"]}">STRIKE</th>'
+        f'<th style="color:{COLORS["green"]};padding:4px 8px;font-size:10px;text-align:right;'
+        f'border-bottom:1px solid {COLORS["border"]}">CE OI CHG</th>'
+        f'<th style="color:{COLORS["green"]};padding:4px 8px;font-size:10px;text-align:center;'
+        f'border-bottom:1px solid {COLORS["border"]}">CE BUILDUP</th>'
+        f'<th style="color:{COLORS["red"]};padding:4px 8px;font-size:10px;text-align:right;'
+        f'border-bottom:1px solid {COLORS["border"]}">PE OI CHG</th>'
+        f'<th style="color:{COLORS["red"]};padding:4px 8px;font-size:10px;text-align:center;'
+        f'border-bottom:1px solid {COLORS["border"]}">PE BUILDUP</th>'
+        '</tr>'
+    )
+
+    rows = ""
+    for r in near_atm:
+        strike = r["strikePrice"]
+        is_atm = abs(strike - underlying) < (underlying * 0.005)
+
+        ce_label, ce_color = _classify_ce_buildup(r["CE_chgOI"], strike, underlying)
+        pe_label, pe_color = _classify_pe_buildup(r["PE_chgOI"], strike, underlying)
+
+        strike_style = (
+            f"background:{COLORS['amber']};color:#000;font-weight:bold"
+            if is_atm else f"color:{COLORS['amber']};font-weight:bold"
+        )
+        border = f"border-bottom:1px solid #1A1A1A"
+        cell = "padding:3px 8px;font-size:11px"
+
+        ce_chg_color = COLORS["green"] if r["CE_chgOI"] > 0 else COLORS["red"]
+        pe_chg_color = COLORS["green"] if r["PE_chgOI"] > 0 else COLORS["red"]
+
+        rows += (
+            f'<tr>'
+            f'<td style="{cell};text-align:center;{border};{strike_style}">{strike:,.0f}</td>'
+            f'<td style="{cell};text-align:right;{border};color:{ce_chg_color}">{r["CE_chgOI"]:+,}</td>'
+            f'<td style="{cell};text-align:center;{border};color:{ce_color};font-weight:bold">{ce_label}</td>'
+            f'<td style="{cell};text-align:right;{border};color:{pe_chg_color}">{r["PE_chgOI"]:+,}</td>'
+            f'<td style="{cell};text-align:center;{border};color:{pe_color};font-weight:bold">{pe_label}</td>'
+            f'</tr>'
+        )
+
+    html = (
+        f'<div style="overflow-x:auto;max-height:450px;overflow-y:auto">'
+        f'<table style="width:100%;border-collapse:collapse;font-family:monospace">'
+        f'<thead style="position:sticky;top:0;background:{COLORS["bg"]}">{header}</thead>'
+        f'<tbody>{rows}</tbody></table></div>'
+    )
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def _render_straddle_chart(records, underlying):
+    """Render Straddle Premium chart — combined CE+PE premium by strike."""
+    if not records or not underlying:
+        return
+
+    sorted_records = sorted(records, key=lambda r: r["strikePrice"])
+    atm_idx = min(range(len(sorted_records)),
+                  key=lambda i: abs(sorted_records[i]["strikePrice"] - underlying))
+    start = max(0, atm_idx - 15)
+    end = min(len(sorted_records), atm_idx + 16)
+    near_atm = sorted_records[start:end]
+
+    if not near_atm:
+        return
+
+    strikes = [r["strikePrice"] for r in near_atm]
+    straddle_premium = [r["CE_LTP"] + r["PE_LTP"] for r in near_atm]
+
+    # Find minimum premium (market's expected move)
+    min_prem = min(straddle_premium)
+    min_strike = strikes[straddle_premium.index(min_prem)]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=strikes, y=straddle_premium,
+        mode="lines+markers",
+        name="Straddle Premium",
+        line=dict(color=COLORS["amber"], width=2),
+        marker=dict(size=5, color=COLORS["amber"]),
+    ))
+
+    # Mark ATM strike
+    if underlying:
+        fig.add_vline(
+            x=underlying, line_dash="dash", line_color=COLORS["blue"],
+            annotation_text=f"Spot: {underlying:,.0f}",
+            annotation_font_color=COLORS["blue"],
+        )
+
+    # Mark minimum straddle premium
+    fig.add_trace(go.Scatter(
+        x=[min_strike], y=[min_prem],
+        mode="markers+text",
+        name=f"Min: ₹{min_prem:,.2f}",
+        marker=dict(size=12, color=COLORS["green"], symbol="diamond"),
+        text=[f"₹{min_prem:,.2f}"],
+        textposition="top center",
+        textfont=dict(color=COLORS["green"], size=11),
+    ))
+
+    # Expected move annotation
+    expected_move_pct = (min_prem / underlying * 100) if underlying else 0
+    fig.add_annotation(
+        x=0.02, y=0.98, xref="paper", yref="paper",
+        text=f"Expected Move: ±₹{min_prem:,.0f} ({expected_move_pct:.1f}%)",
+        showarrow=False,
+        font=dict(color=COLORS["amber"], size=12),
+        bgcolor="rgba(26,26,26,0.8)",
+        bordercolor=COLORS["border"],
+        borderwidth=1,
+        borderpad=4,
+    )
+
+    fig.update_layout(**plotly_layout(
+        height=350,
+        xaxis_title="Strike Price",
+        yaxis_title="Combined Premium (₹)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    ))
+
+    st.markdown("##### STRADDLE PREMIUM")
     st.plotly_chart(fig, use_container_width=True)

@@ -38,13 +38,15 @@ def render():
         '<p style="color:#FF9900;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">OVERLAYS</p>',
         unsafe_allow_html=True,
     )
-    ov_cols = st.columns(6)
+    ov_cols = st.columns(8)
     show_sma20 = ov_cols[0].checkbox("SMA 20", key="m03_sma20")
     show_sma50 = ov_cols[1].checkbox("SMA 50", value=True, key="m03_sma50")
     show_sma200 = ov_cols[2].checkbox("SMA 200", key="m03_sma200")
     show_ema9 = ov_cols[3].checkbox("EMA 9", key="m03_ema9")
     show_ema21 = ov_cols[4].checkbox("EMA 21", key="m03_ema21")
     show_bb = ov_cols[5].checkbox("Bollinger", key="m03_bb")
+    show_vwap = ov_cols[6].checkbox("VWAP", key="m03_vwap")
+    show_sr = ov_cols[7].checkbox("S/R Lines", key="m03_sr")
 
     # ── Sub-chart toggles ──
     st.markdown(
@@ -54,6 +56,9 @@ def render():
     sc_cols = st.columns(6)
     show_rsi = sc_cols[0].checkbox("RSI (14)", key="m03_rsi")
     show_macd = sc_cols[1].checkbox("MACD", key="m03_macd")
+    show_adx = sc_cols[2].checkbox("ADX", key="m03_adx")
+    show_stoch = sc_cols[3].checkbox("Stochastic", key="m03_stoch")
+    show_obv = sc_cols[4].checkbox("OBV", key="m03_obv")
 
     # ── Fetch data ──
     try:
@@ -71,8 +76,9 @@ def render():
         overlays = {
             "sma20": show_sma20, "sma50": show_sma50, "sma200": show_sma200,
             "ema9": show_ema9, "ema21": show_ema21, "bb": show_bb,
+            "vwap": show_vwap, "sr": show_sr,
         }
-        fig = _build_chart(df, overlays, show_rsi, show_macd)
+        fig = _build_chart(df, overlays, show_rsi, show_macd, show_adx, show_stoch, show_obv)
         st.plotly_chart(fig, use_container_width=True)
 
         # ── Summary stats ──
@@ -82,17 +88,13 @@ def render():
         logger.error(f"m03_price_charts | {type(e).__name__}: {e}")
 
 
-def _build_chart(df, overlays, show_rsi, show_macd):
+def _build_chart(df, overlays, show_rsi, show_macd, show_adx=False, show_stoch=False, show_obv=False):
     """Build the candlestick chart with overlays and sub-charts."""
     # Determine subplot rows
-    n_rows = 2  # candlestick + volume always
-    row_heights = [0.55, 0.15]
-    if show_rsi:
-        n_rows += 1
-        row_heights.append(0.15)
-    if show_macd:
-        n_rows += 1
-        row_heights.append(0.15)
+    sub_charts = [show_rsi, show_macd, show_adx, show_stoch, show_obv]
+    active_sub = sum(1 for s in sub_charts if s)
+    n_rows = 2 + active_sub  # candlestick + volume + active sub-charts
+    row_heights = [0.55, 0.15] + [0.15] * active_sub
 
     fig = make_subplots(
         rows=n_rows, cols=1, shared_xaxes=True,
@@ -128,18 +130,26 @@ def _build_chart(df, overlays, show_rsi, show_macd):
         row=2, col=1,
     )
 
-    # ── RSI ──
+    # ── Sub-charts ──
     current_row = 3
     if show_rsi:
         _add_rsi(fig, df, current_row)
         current_row += 1
-
-    # ── MACD ──
     if show_macd:
         _add_macd(fig, df, current_row)
+        current_row += 1
+    if show_adx:
+        _add_adx(fig, df, current_row)
+        current_row += 1
+    if show_stoch:
+        _add_stochastic(fig, df, current_row)
+        current_row += 1
+    if show_obv:
+        _add_obv(fig, df, current_row)
+        current_row += 1
 
     # ── Layout ──
-    chart_height = 500 + (150 if show_rsi else 0) + (150 if show_macd else 0)
+    chart_height = 500 + 150 * active_sub
     fig.update_layout(**plotly_layout(
         height=chart_height,
         xaxis_rangeslider_visible=False,
@@ -180,6 +190,44 @@ def _add_overlays(fig, df, overlays):
             fig.add_trace(
                 go.Scatter(x=df["Date"], y=values, mode="lines",
                            name=name, line=dict(color=color, width=1)),
+                row=1, col=1,
+            )
+
+    # ── VWAP ──
+    if overlays.get("vwap"):
+        typical_price = (df["High"] + df["Low"] + df["Close"]) / 3
+        cum_tp_vol = (typical_price * df["Volume"]).cumsum()
+        cum_vol = df["Volume"].cumsum().replace(0, float("nan"))
+        vwap = cum_tp_vol / cum_vol
+        fig.add_trace(
+            go.Scatter(x=df["Date"], y=vwap, mode="lines",
+                       name="VWAP", line=dict(color="#FF66FF", width=1.5, dash="dash")),
+            row=1, col=1,
+        )
+
+    # ── Support / Resistance Lines ──
+    if overlays.get("sr"):
+        lookback = 20
+        highs = df["High"].values
+        lows = df["Low"].values
+        pivot_levels = []
+        for i in range(lookback, len(df) - lookback):
+            window_high = highs[i - lookback:i + lookback + 1]
+            if highs[i] == window_high.max():
+                pivot_levels.append((i, float(highs[i]), "R"))
+            window_low = lows[i - lookback:i + lookback + 1]
+            if lows[i] == window_low.min():
+                pivot_levels.append((i, float(lows[i]), "S"))
+        # Keep most recent 5 pivots
+        pivot_levels = pivot_levels[-5:] if len(pivot_levels) > 5 else pivot_levels
+        sr_colors = {"R": COLORS["red"], "S": COLORS["green"]}
+        for idx, level, sr_type in pivot_levels:
+            fig.add_hline(
+                y=level, line_dash="dot",
+                line_color=sr_colors[sr_type], line_width=0.8,
+                annotation_text=f"{sr_type} {level:,.1f}",
+                annotation_font_color=sr_colors[sr_type],
+                annotation_font_size=9,
                 row=1, col=1,
             )
 
@@ -251,6 +299,67 @@ def _add_macd(fig, df, row):
         row=row, col=1,
     )
     fig.update_yaxes(title_text="MACD", row=row, col=1)
+
+
+def _add_adx(fig, df, row):
+    """Add ADX sub-chart with DI+ and DI- lines."""
+    from ta.trend import ADXIndicator
+
+    adx_ind = ADXIndicator(high=df["High"], low=df["Low"], close=df["Close"], window=14)
+    fig.add_trace(
+        go.Scatter(x=df["Date"], y=adx_ind.adx(), mode="lines",
+                   name="ADX", line=dict(color=COLORS["amber"], width=1.5)),
+        row=row, col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=df["Date"], y=adx_ind.adx_pos(), mode="lines",
+                   name="DI+", line=dict(color=COLORS["green"], width=1)),
+        row=row, col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=df["Date"], y=adx_ind.adx_neg(), mode="lines",
+                   name="DI-", line=dict(color=COLORS["red"], width=1)),
+        row=row, col=1,
+    )
+    fig.add_hline(y=25, line_dash="dash", line_color="#555555",
+                  line_width=0.8, row=row, col=1)
+    fig.update_yaxes(title_text="ADX", row=row, col=1)
+
+
+def _add_stochastic(fig, df, row):
+    """Add Stochastic Oscillator sub-chart with %K, %D and reference lines."""
+    from ta.momentum import StochasticOscillator
+
+    stoch = StochasticOscillator(high=df["High"], low=df["Low"], close=df["Close"],
+                                 window=14, smooth_window=3)
+    fig.add_trace(
+        go.Scatter(x=df["Date"], y=stoch.stoch(), mode="lines",
+                   name="%K", line=dict(color=COLORS["blue"], width=1.5)),
+        row=row, col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=df["Date"], y=stoch.stoch_signal(), mode="lines",
+                   name="%D", line=dict(color=COLORS["amber"], width=1)),
+        row=row, col=1,
+    )
+    fig.add_hline(y=80, line_dash="dash", line_color=COLORS["red"],
+                  line_width=0.8, row=row, col=1)
+    fig.add_hline(y=20, line_dash="dash", line_color=COLORS["green"],
+                  line_width=0.8, row=row, col=1)
+    fig.update_yaxes(title_text="Stoch", range=[0, 100], row=row, col=1)
+
+
+def _add_obv(fig, df, row):
+    """Add On-Balance Volume sub-chart."""
+    from ta.volume import OnBalanceVolumeIndicator
+
+    obv = OnBalanceVolumeIndicator(close=df["Close"], volume=df["Volume"])
+    fig.add_trace(
+        go.Scatter(x=df["Date"], y=obv.on_balance_volume(), mode="lines",
+                   name="OBV", line=dict(color="#33CCCC", width=1.5)),
+        row=row, col=1,
+    )
+    fig.update_yaxes(title_text="OBV", row=row, col=1)
 
 
 def _render_summary(df, symbol):

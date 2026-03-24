@@ -33,6 +33,7 @@ OPTIMIZATION_TARGETS = [
     "Min Volatility",
     "Risk Parity",
     "Max Return for Given Risk",
+    "Black-Litterman",
 ]
 
 
@@ -84,6 +85,25 @@ def render():
             key="m12_target_vol",
         )
 
+    bl_views = {}
+    if target == "Black-Litterman":
+        st.markdown(
+            f'<p style="color:{COLORS["amber"]};font-size:10px;text-transform:uppercase;'
+            f'letter-spacing:1px;margin-bottom:2px">INVESTOR VIEWS (expected annual return %)</p>',
+            unsafe_allow_html=True,
+        )
+        # For each selected symbol, allow user to input a view
+        view_cols = st.columns(min(len(symbols), 5))
+        for i, sym in enumerate(symbols[:10]):  # max 10 views
+            with view_cols[i % min(len(symbols), 5)]:
+                view_val = st.number_input(
+                    sym, value=0.0, step=1.0, format="%.1f",
+                    key=f"m12_bl_view_{sym}",
+                    help=f"Expected annual return for {sym} (%)",
+                )
+                if view_val != 0.0:
+                    bl_views[sym] = view_val / 100.0  # convert to decimal
+
     if len(symbols) < 2:
         st.info("Select at least 2 stocks to optimize.")
         return
@@ -118,7 +138,8 @@ def render():
     # ── Run optimization ──
     with st.spinner("Running optimization..."):
         opt_weights = _optimize(
-            mean_returns, cov_matrix, n_assets, target, target_vol
+            mean_returns, cov_matrix, n_assets, target, target_vol,
+            bl_views=bl_views, symbols=valid_symbols,
         )
         mc_results = _monte_carlo(mean_returns, cov_matrix, n_assets)
         frontier = _efficient_frontier(mean_returns, cov_matrix, n_assets)
@@ -210,7 +231,8 @@ def _portfolio_performance(weights, mean_returns, cov_matrix):
     return float(ann_ret), float(ann_vol)
 
 
-def _optimize(mean_returns, cov_matrix, n_assets, target, target_vol=None):
+def _optimize(mean_returns, cov_matrix, n_assets, target, target_vol=None,
+              bl_views=None, symbols=None):
     """Run constrained optimization. Returns optimal weight array or None."""
     bounds = tuple((0.0, 1.0) for _ in range(n_assets))
     weight_sum_constraint = {"type": "eq", "fun": lambda w: np.sum(w) - 1.0}
@@ -231,6 +253,10 @@ def _optimize(mean_returns, cov_matrix, n_assets, target, target_vol=None):
             return _optimize_max_return_for_risk(
                 mean_returns, cov_matrix, n_assets, bounds,
                 weight_sum_constraint, init, target_vol
+            )
+        elif target == "Black-Litterman":
+            return _optimize_black_litterman(
+                mean_returns, cov_matrix, n_assets, bl_views, symbols
             )
     except Exception as e:
         logger.error(f"_optimize | target={target} | {type(e).__name__}: {e}")
@@ -336,6 +362,75 @@ def _optimize_max_return_for_risk(
     return result.x
 
 
+def _optimize_black_litterman(mean_returns, cov_matrix, n_assets, bl_views, symbols):
+    """Black-Litterman model: blend market equilibrium with investor views.
+
+    Steps:
+    1. Compute market-implied equilibrium returns (pi = delta * Sigma * w_mkt)
+    2. Build P (pick matrix) and Q (view returns) from user views
+    3. Compute BL posterior: E[R] = [(tau*Sigma)^-1 + P'*Omega^-1*P]^-1 * [(tau*Sigma)^-1*pi + P'*Omega^-1*Q]
+    4. Optimize max Sharpe with BL expected returns
+    """
+    # Risk aversion coefficient (typical: 2.5)
+    delta = 2.5
+    # Uncertainty scalar
+    tau = 0.05
+
+    # Market-cap weights as prior (equal weight if no market cap data)
+    w_mkt = np.ones(n_assets) / n_assets
+
+    # Equilibrium excess returns
+    pi = delta * cov_matrix @ w_mkt
+
+    if not bl_views or not symbols:
+        # No views provided — return market-cap weighted
+        return w_mkt
+
+    # Build view matrices
+    view_symbols = [s for s in symbols if s in bl_views]
+    if not view_symbols:
+        return w_mkt
+
+    k = len(view_symbols)  # number of views
+    P = np.zeros((k, n_assets))
+    Q = np.zeros(k)
+
+    for i, sym in enumerate(view_symbols):
+        idx = symbols.index(sym)
+        P[i, idx] = 1.0
+        Q[i] = bl_views[sym]
+
+    # Omega = diag(P * tau * Sigma * P') — uncertainty of views
+    omega = np.diag(np.diag(P @ (tau * cov_matrix) @ P.T))
+
+    # BL posterior expected returns
+    tau_sigma_inv = np.linalg.inv(tau * cov_matrix)
+    omega_inv = np.linalg.inv(omega)
+
+    M = np.linalg.inv(tau_sigma_inv + P.T @ omega_inv @ P)
+    bl_returns = M @ (tau_sigma_inv @ pi + P.T @ omega_inv @ Q)
+
+    # Optimize max Sharpe using BL returns
+    bounds = tuple((0.0, 1.0) for _ in range(n_assets))
+    eq_con = {"type": "eq", "fun": lambda w: np.sum(w) - 1.0}
+    init = np.ones(n_assets) / n_assets
+
+    def neg_sharpe(w):
+        ret = np.sum(bl_returns * w) * TRADING_DAYS
+        vol = np.sqrt(w @ cov_matrix @ w) * np.sqrt(TRADING_DAYS)
+        if vol < 1e-10:
+            return 1e6
+        return -(ret - INDIA_RISK_FREE) / vol
+
+    result = minimize(
+        neg_sharpe, init, method="SLSQP", bounds=bounds, constraints=[eq_con],
+        options={"maxiter": 1000, "ftol": 1e-12},
+    )
+
+    logger.info(f"black_litterman | {k} views | converged={result.success}")
+    return result.x
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # MONTE CARLO SIMULATION
 # ═════════════════════════════════════════════════════════════════════════════
@@ -346,13 +441,13 @@ def _monte_carlo(mean_returns, cov_matrix, n_assets):
 
     Returns dict with arrays: returns, volatilities, sharpes.
     """
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     results_ret = np.zeros(MONTE_CARLO_SIMS)
     results_vol = np.zeros(MONTE_CARLO_SIMS)
     results_sharpe = np.zeros(MONTE_CARLO_SIMS)
 
     for i in range(MONTE_CARLO_SIMS):
-        w = np.random.random(n_assets)
+        w = rng.random(n_assets)
         w /= w.sum()
         ret, vol = _portfolio_performance(w, mean_returns, cov_matrix)
         results_ret[i] = ret
