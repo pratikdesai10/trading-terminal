@@ -32,7 +32,8 @@ streamlit run app.py --server.port 8502
   - `nse_fno.py` — Option chain data (jugaad-data primary, nsepython fallback). PCR, max pain calculations.
   - `economic.py` — RBI rates (hardcoded), forex/commodity/yield data via yfinance. Economic calendar dates.
   - `cache.py` — Simple TTL cache decorator for non-Streamlit contexts.
-- **`modules/`** — Each Bloomberg function is one module file (m01, m02, ..., m16). Each exposes a `render()` function.
+  - `database.py` — SQLite persistence layer. CRUD for portfolio, watchlist, alerts, paper trading. Auto-creates `terminal.db`.
+- **`modules/`** — Each Bloomberg function is one module file (m01, m02, ..., m17). Each exposes a `render()` function.
 - **`analytics/`** — Reusable calculation engines.
   - `screener_engine.py` — Fundamental data fetching via yfinance for stock screener.
   - `risk_metrics.py` — VaR, CVaR/ES, Sharpe, Sortino, max drawdown calculations (pure numpy).
@@ -55,4 +56,6 @@ streamlit run app.py --server.port 8502
 **Phase 3** complete: M06 (Stock Screener) + M07 (Option Chain & OI) + M14 (FII/DII Tracker) + analytics/screener_engine.py + data/nse_fno.py.
 **Phase 4** complete: M10 (Portfolio Tracker) + M11 (Backtesting Engine) + M12 (Portfolio Optimizer) + analytics/risk_metrics.py.
 **Phase 5** complete: M13 (Economic Dashboard) + M15 (News & Sentiment) + M16 (Price Alerts) + data/economic.py.
-All 16 modules built and operational.
+**Phase 6** complete: Advanced indicators, expanded universe (Nifty 100/200), peer comparison, trend sparklines, Black-Litterman, XIRR, custom strategy sandbox.
+**Phase 7** complete: SQLite persistence (data/database.py) for portfolio, watchlist, alerts + M17 (Paper Trading) with virtual cash, order execution, position tracking, realized P&L.
+All 17 modules built and operational. Data persists across page refreshes via SQLite (data/terminal.db).

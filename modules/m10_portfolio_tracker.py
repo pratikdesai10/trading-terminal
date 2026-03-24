@@ -18,9 +18,10 @@ def render():
     """Render the Portfolio Tracker module."""
     st.markdown("### PORTFOLIO TRACKER")
 
-    # Initialize session state
+    # Initialize session state (load from DB)
     if _STATE_KEY not in st.session_state:
-        st.session_state[_STATE_KEY] = []
+        from data.database import load_holdings
+        st.session_state[_STATE_KEY] = load_holdings()
 
     # ── Controls: Add holding / Import-Export ──
     _render_controls()
@@ -111,6 +112,8 @@ def _render_controls():
                     "avg_price": float(avg_price),
                     "buy_date": buy_date.isoformat(),
                 }
+                from data.database import save_holding
+                new_holding["_db_id"] = save_holding(new_holding)
                 st.session_state[_STATE_KEY].append(new_holding)
                 logger.info(
                     f"m10_portfolio | ADD | {symbol} qty={qty} "
@@ -133,7 +136,11 @@ def _render_controls():
                 try:
                     data = json.loads(uploaded.read())
                     if isinstance(data, list):
-                        st.session_state[_STATE_KEY] = data
+                        from data.database import replace_all_holdings
+                        replace_all_holdings(data)
+                        # Reload from DB to get _db_id values
+                        from data.database import load_holdings
+                        st.session_state[_STATE_KEY] = load_holdings()
                         logger.info(
                             f"m10_portfolio | IMPORT | {len(data)} holdings loaded"
                         )
@@ -145,9 +152,11 @@ def _render_controls():
 
         with io_c2:
             if st.session_state[_STATE_KEY]:
-                portfolio_json = json.dumps(
-                    st.session_state[_STATE_KEY], indent=2
-                )
+                export_data = [
+                    {k: v for k, v in h.items() if k != "_db_id"}
+                    for h in st.session_state[_STATE_KEY]
+                ]
+                portfolio_json = json.dumps(export_data, indent=2)
                 st.download_button(
                     "SAVE", portfolio_json,
                     file_name="portfolio.json",
@@ -177,6 +186,9 @@ def _render_controls():
         with rm_c2:
             if st.button("REMOVE", use_container_width=True):
                 removed = holdings.pop(rm_idx)
+                if "_db_id" in removed:
+                    from data.database import remove_holding
+                    remove_holding(removed["_db_id"])
                 logger.info(f"m10_portfolio | REMOVE | {removed['symbol']}")
                 st.rerun()
 
