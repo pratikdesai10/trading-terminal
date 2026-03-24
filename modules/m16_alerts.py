@@ -25,9 +25,10 @@ def render():
     """Render the Price & Volume Alerts module."""
     st.markdown("### PRICE & VOLUME ALERTS")
 
-    # Initialize session state
+    # Initialize session state (load from DB)
     if _STATE_KEY not in st.session_state:
-        st.session_state[_STATE_KEY] = []
+        from data.database import load_alerts
+        st.session_state[_STATE_KEY] = load_alerts()
 
     # ── Add Alert section ──
     _render_add_alert()
@@ -151,6 +152,8 @@ def _render_add_alert():
                 "triggered": False,
                 "triggered_at": None,
             }
+            from data.database import save_alert
+            new_alert["_db_id"] = save_alert(new_alert)
             st.session_state[_STATE_KEY].append(new_alert)
             logger.info(
                 f"m16_alerts | ADD | {symbol} {condition} {value}"
@@ -237,6 +240,9 @@ def _check_all_alerts():
             alert["triggered_at"] = datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
             alert["trigger_price"] = ltp
             alert["trigger_pchange"] = pchange
+            if "_db_id" in alert:
+                from data.database import update_alert_triggered
+                update_alert_triggered(alert["_db_id"], alert["triggered_at"], ltp, pchange)
             triggered_count += 1
             logger.info(
                 f"m16_alerts | TRIGGERED | {sym} {condition} target={target} "
@@ -397,6 +403,9 @@ def _render_active_alerts():
             if st.button("REMOVE", use_container_width=True, key="m16_rm_btn"):
                 # Find the actual index in the full alerts list
                 alert_to_remove = active[rm_idx]
+                if "_db_id" in alert_to_remove:
+                    from data.database import remove_alert
+                    remove_alert(alert_to_remove["_db_id"])
                 st.session_state[_STATE_KEY].remove(alert_to_remove)
                 logger.info(
                     f"m16_alerts | REMOVE | {alert_to_remove['symbol']} "
@@ -516,6 +525,8 @@ def _render_controls():
 
     with c2:
         if st.button("CLEAR ALL", use_container_width=True, key="m16_clear_btn"):
+            from data.database import clear_all_alerts
+            clear_all_alerts()
             st.session_state[_STATE_KEY] = []
             logger.info("m16_alerts | CLEAR ALL")
             st.rerun()

@@ -11,9 +11,11 @@ def render():
     """Render the Watchlist module."""
     st.markdown("### WATCHLIST")
 
-    # ── Initialize watchlist in session state ──
+    # ── Initialize watchlist in session state (load from DB) ──
     if "watchlist" not in st.session_state:
-        st.session_state.watchlist = list(DEFAULT_WATCHLIST)
+        from data.database import load_watchlist
+        db_wl = load_watchlist()
+        st.session_state.watchlist = db_wl if db_wl else list(DEFAULT_WATCHLIST)
 
     # ── Add / Remove controls ──
     col_add, col_remove = st.columns([2, 1])
@@ -27,6 +29,8 @@ def render():
         )
         if new_symbol and st.button("ADD", key="wl_add_btn"):
             st.session_state.watchlist.append(new_symbol)
+            from data.database import add_watchlist_symbol
+            add_watchlist_symbol(new_symbol)
             st.rerun()
 
     with col_remove:
@@ -39,6 +43,8 @@ def render():
         )
         if rm_symbol and st.button("REMOVE", key="wl_rm_btn"):
             st.session_state.watchlist.remove(rm_symbol)
+            from data.database import remove_watchlist_symbol
+            remove_watchlist_symbol(rm_symbol)
             st.rerun()
 
     st.markdown("---")

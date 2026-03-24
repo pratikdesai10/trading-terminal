@@ -18,6 +18,12 @@ st.set_page_config(
 # ── Apply Bloomberg dark theme ──
 apply_theme()
 
+# ── Initialize database (once per session) ──
+if "db_initialized" not in st.session_state:
+    from data.database import init_db
+    init_db()
+    st.session_state.db_initialized = True
+
 # ── Request tracing ──
 rid = new_request_id()
 logger.info(f"PAGE RENDER START | request_id={rid}")
@@ -47,7 +53,8 @@ st.markdown(
 # ── Tab navigation ──
 (tab_overview, tab_watchlist, tab_charts, tab_company, tab_financials,
  tab_screener, tab_options, tab_heatmap, tab_comparison, tab_portfolio,
- tab_backtest, tab_optimizer, tab_economic, tab_fii, tab_news, tab_alerts) = st.tabs([
+ tab_backtest, tab_optimizer, tab_economic, tab_fii, tab_news, tab_alerts,
+ tab_paper) = st.tabs([
     "M01 OVERVIEW",
     "M02 WATCHLIST",
     "M03 CHARTS",
@@ -64,6 +71,7 @@ st.markdown(
     "M14 FII/DII",
     "M15 NEWS",
     "M16 ALERTS",
+    "M17 PAPER",
 ])
 
 with tab_overview:
@@ -129,3 +137,7 @@ with tab_news:
 with tab_alerts:
     from modules.m16_alerts import render as render_alerts
     render_alerts()
+
+with tab_paper:
+    from modules.m17_paper_trading import render as render_paper
+    render_paper()
