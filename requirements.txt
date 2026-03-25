@@ -21,3 +21,6 @@ requests==2.32.3
 
 # Timezone
 pytz==2024.2
+
+# AI Copilot (Claude API — optional, copilot works without it via Ollama)
+anthropic>=0.42.0

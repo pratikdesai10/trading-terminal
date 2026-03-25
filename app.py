@@ -54,7 +54,7 @@ st.markdown(
 (tab_overview, tab_watchlist, tab_charts, tab_company, tab_financials,
  tab_screener, tab_options, tab_heatmap, tab_comparison, tab_portfolio,
  tab_backtest, tab_optimizer, tab_economic, tab_fii, tab_news, tab_alerts,
- tab_paper) = st.tabs([
+ tab_paper, tab_copilot) = st.tabs([
     "M01 OVERVIEW",
     "M02 WATCHLIST",
     "M03 CHARTS",
@@ -72,6 +72,7 @@ st.markdown(
     "M15 NEWS",
     "M16 ALERTS",
     "M17 PAPER",
+    "M18 COPILOT",
 ])
 
 with tab_overview:
@@ -141,3 +142,7 @@ with tab_alerts:
 with tab_paper:
     from modules.m17_paper_trading import render as render_paper
     render_paper()
+
+with tab_copilot:
+    from modules.m18_ai_copilot import render as render_copilot
+    render_copilot()

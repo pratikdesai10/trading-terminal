@@ -119,7 +119,7 @@ def _render_add_alert():
 
     with c_val:
         # Default value based on LTP if available
-        default_price = round(_quote["lastPrice"], 2) if _quote else 100.0
+        default_price = float(round(_quote["lastPrice"], 2)) if _quote else 100.0
         if condition in ("pct_change_above", "pct_change_below"):
             value = st.number_input(
                 "VALUE (%)",
