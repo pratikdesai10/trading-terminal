@@ -1,11 +1,19 @@
-"""Structured logging with UUID request tracing."""
+"""Structured logging with UUID request tracing and file rotation."""
 
 import logging
+import logging.handlers
+import os
 import uuid
 import time
 from functools import wraps
 
 _request_id = "--------"
+
+_LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+_LOG_FILE = os.path.join(_LOG_DIR, "terminal.log")
+
+_FMT = "%(asctime)s | %(levelname)-5s | %(request_id)s | %(module)s.%(funcName)s | %(message)s"
+_DATEFMT = "%Y-%m-%d %H:%M:%S"
 
 
 class RequestIdFormatter(logging.Formatter):
@@ -21,14 +29,29 @@ logger = logging.getLogger("terminal")
 logger.setLevel(logging.DEBUG)
 logger.propagate = False  # Don't propagate to root logger
 
-# Console handler with our custom formatter
-_handler = logging.StreamHandler()
-_handler.setLevel(logging.DEBUG)
-_handler.setFormatter(RequestIdFormatter(
+_formatter = RequestIdFormatter(fmt=_FMT, datefmt=_DATEFMT)
+
+# Console handler — INFO and above (keeps console clean)
+_console = logging.StreamHandler()
+_console.setLevel(logging.INFO)
+_console.setFormatter(RequestIdFormatter(
     fmt="%(asctime)s | %(levelname)-5s | %(request_id)s | %(module)s.%(funcName)s | %(message)s",
     datefmt="%H:%M:%S",
 ))
-logger.addHandler(_handler)
+logger.addHandler(_console)
+
+# File handler — DEBUG and above with rotation (5 MB max, keep 3 backups)
+try:
+    os.makedirs(_LOG_DIR, exist_ok=True)
+    _file = logging.handlers.RotatingFileHandler(
+        _LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8",
+    )
+    _file.setLevel(logging.DEBUG)
+    _file.setFormatter(_formatter)
+    logger.addHandler(_file)
+except OSError:
+    # If we can't create log dir/file, proceed with console only
+    pass
 
 
 def new_request_id():

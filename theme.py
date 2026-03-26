@@ -63,29 +63,44 @@ def apply_theme():
             font-size: 12px !important;
         }
 
-        /* ── Tabs ── */
-        .stTabs [data-baseweb="tab-list"] {
+        /* ── Radio-as-Tab-Bar ── */
+        div[data-testid="stRadio"] > div {
             background-color: #111111 !important;
             border-bottom: 2px solid #333333 !important;
-            gap: 0px;
+            gap: 0px !important;
+            flex-wrap: wrap;
+            padding: 0 !important;
         }
-        .stTabs [data-baseweb="tab"] {
+        div[data-testid="stRadio"] > div > label {
             color: #888888 !important;
             background-color: transparent !important;
             border: none !important;
-            padding: 8px 20px !important;
+            border-bottom: 2px solid transparent !important;
+            padding: 8px 16px !important;
             font-size: 12px !important;
             text-transform: uppercase;
             letter-spacing: 1px;
             font-family: 'Fira Code', monospace !important;
+            cursor: pointer;
+            margin: 0 !important;
+            white-space: nowrap;
         }
-        .stTabs [aria-selected="true"] {
+        div[data-testid="stRadio"] > div > label:hover {
+            color: #FF9900 !important;
+        }
+        div[data-testid="stRadio"] > div > label[data-checked="true"],
+        div[data-testid="stRadio"] > div > label:has(input:checked) {
             color: #FF9900 !important;
             border-bottom: 2px solid #FF9900 !important;
             background-color: #1A1A1A !important;
         }
-        .stTabs [data-baseweb="tab"]:hover {
-            color: #FF9900 !important;
+        /* Hide the radio circle indicators */
+        div[data-testid="stRadio"] > div > label > div:first-child {
+            display: none !important;
+        }
+        /* Hide the "Module" label */
+        div[data-testid="stRadio"] > label {
+            display: none !important;
         }
 
         /* ── DataFrames / Tables ── */
@@ -174,9 +189,40 @@ def apply_theme():
             color: #E0E0E0 !important;
         }
 
+        /* ── Terminal header bar ── */
+        .terminal-header {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            padding: 4px 0 !important;
+            border-bottom: 1px solid #333333 !important;
+            margin-bottom: 10px !important;
+        }
+        .terminal-header .title {
+            color: #FF9900 !important;
+            font-size: 16px !important;
+            font-weight: bold !important;
+            font-family: 'Fira Code', monospace !important;
+            letter-spacing: 1px !important;
+        }
+        .terminal-header .status-open {
+            color: #00CC66 !important;
+        }
+        .terminal-header .status-closed {
+            color: #FF3333 !important;
+        }
+        .terminal-header .datetime {
+            color: #888888 !important;
+            margin-left: 16px !important;
+        }
+        .terminal-header .info {
+            font-family: 'Fira Code', monospace !important;
+            font-size: 12px !important;
+        }
+
         /* ── Reduce default Streamlit padding ── */
         .block-container {
-            padding-top: 1rem !important;
+            padding-top: 2.5rem !important;
             padding-bottom: 0rem !important;
             max-width: 100% !important;
         }

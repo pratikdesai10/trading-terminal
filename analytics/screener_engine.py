@@ -37,42 +37,52 @@ def run_screener(stocks_data, filters):
 
 
 def fetch_screener_data(symbols, sectors):
-    """Fetch fundamental data for a list of symbols via yfinance.
+    """Fetch fundamental data for a list of symbols via yfinance (parallel).
 
     Returns list of dicts with key metrics.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     import yfinance as yf
+
+    def _fetch_single(symbol):
+        ticker = yf.Ticker(f"{symbol}.NS")
+        info = ticker.info or {}
+        if not info.get("currentPrice") and not info.get("regularMarketPrice"):
+            return None
+        price = info.get("currentPrice") or info.get("regularMarketPrice", 0)
+        return {
+            "Symbol": symbol,
+            "Sector": sectors.get(symbol, ""),
+            "Price": price,
+            "Mkt Cap (Cr)": round(info.get("marketCap", 0) / 1e7, 0),
+            "P/E": round(info.get("trailingPE") or 0, 1),
+            "P/B": round(info.get("priceToBook") or 0, 1),
+            "ROE (%)": round((info.get("returnOnEquity") or 0) * 100, 1),
+            "D/E": round(info.get("debtToEquity") or 0, 1),
+            "Div Yield (%)": round((info.get("dividendYield") or 0) * 100, 2),
+            "Rev Growth (%)": round((info.get("revenueGrowth") or 0) * 100, 1),
+            "52W High": info.get("fiftyTwoWeekHigh", 0),
+            "52W Low": info.get("fiftyTwoWeekLow", 0),
+            "Beta": round(info.get("beta") or 0, 2),
+            "EPS": round(info.get("trailingEps") or 0, 1),
+        }
 
     records = []
     failed = []
-    for symbol in symbols:
-        try:
-            ticker = yf.Ticker(f"{symbol}.NS")
-            info = ticker.info or {}
-            if not info.get("currentPrice") and not info.get("regularMarketPrice"):
-                failed.append(symbol)
-                continue
 
-            price = info.get("currentPrice") or info.get("regularMarketPrice", 0)
-            records.append({
-                "Symbol": symbol,
-                "Sector": sectors.get(symbol, ""),
-                "Price": price,
-                "Mkt Cap (Cr)": round(info.get("marketCap", 0) / 1e7, 0),
-                "P/E": round(info.get("trailingPE") or 0, 1),
-                "P/B": round(info.get("priceToBook") or 0, 1),
-                "ROE (%)": round((info.get("returnOnEquity") or 0) * 100, 1),
-                "D/E": round(info.get("debtToEquity") or 0, 1),
-                "Div Yield (%)": round((info.get("dividendYield") or 0) * 100, 2),
-                "Rev Growth (%)": round((info.get("revenueGrowth") or 0) * 100, 1),
-                "52W High": info.get("fiftyTwoWeekHigh", 0),
-                "52W Low": info.get("fiftyTwoWeekLow", 0),
-                "Beta": round(info.get("beta") or 0, 2),
-                "EPS": round(info.get("trailingEps") or 0, 1),
-            })
-        except Exception as e:
-            logger.warning(f"screener_fetch | {symbol} | {type(e).__name__}: {e}")
-            failed.append(symbol)
+    with ThreadPoolExecutor(max_workers=15) as executor:
+        future_map = {executor.submit(_fetch_single, s): s for s in symbols}
+        for future in as_completed(future_map):
+            sym = future_map[future]
+            try:
+                result = future.result(timeout=15)
+                if result:
+                    records.append(result)
+                else:
+                    failed.append(sym)
+            except Exception as e:
+                logger.warning(f"screener_fetch | {sym} | {type(e).__name__}: {e}")
+                failed.append(sym)
 
     if failed:
         logger.warning(f"screener_fetch | failed: {failed}")

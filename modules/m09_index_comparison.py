@@ -7,29 +7,51 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from config import COLORS, NIFTY_50_SYMBOLS, plotly_layout
+from config import COLORS, NIFTY_500_SYMBOLS, SECTORAL_INDICES, KEY_INDICES, plotly_layout
 from utils.logger import logger
 
 
 # Distinct colors for comparison lines
-COMPARE_COLORS = ["#3399FF", "#00CC66", "#FF9900", "#CC66FF", "#FF3333"]
+COMPARE_COLORS = ["#3399FF", "#00CC66", "#FF9900", "#CC66FF", "#FF3333",
+                  "#FFCC00", "#FF99CC", "#33CCCC", "#FF6633", "#66FF66"]
 
 # India risk-free rate (~10Y G-Sec yield approximation)
 RISK_FREE_RATE = 6.5
+
+# Index options for comparison (sector rotation analysis)
+INDEX_OPTIONS = (
+    ["NIFTY 50", "NIFTY NEXT 50", "NIFTY MIDCAP 50", "INDIA VIX"]
+    + SECTORAL_INDICES
+)
 
 
 def render():
     """Render the Index / Stock Comparison module."""
     st.markdown("### INDEX / STOCK COMPARISON")
 
-    # ── Controls ──
-    symbols = st.multiselect(
-        "SELECT SYMBOLS (max 5)",
-        NIFTY_50_SYMBOLS,
-        default=["RELIANCE", "TCS", "HDFCBANK"],
-        max_selections=5,
-        key="m09_symbols",
+    # ── Mode toggle ──
+    mode = st.radio(
+        "COMPARE", ["Stocks", "Indices"],
+        horizontal=True, key="m09_mode", label_visibility="collapsed",
     )
+
+    # ── Controls based on mode ──
+    if mode == "Indices":
+        symbols = st.multiselect(
+            "SELECT INDICES (max 10)",
+            INDEX_OPTIONS,
+            default=["NIFTY BANK", "NIFTY IT", "NIFTY PHARMA", "NIFTY AUTO"],
+            max_selections=10,
+            key="m09_indices",
+        )
+    else:
+        symbols = st.multiselect(
+            "SELECT STOCKS (max 5)",
+            NIFTY_500_SYMBOLS,
+            default=["RELIANCE", "TCS", "HDFCBANK"],
+            max_selections=5,
+            key="m09_symbols",
+        )
 
     col_start, col_end = st.columns(2)
     with col_start:
@@ -38,16 +60,16 @@ def render():
         end_date = st.date_input("END DATE", value=date.today(), key="m09_end")
 
     if len(symbols) < 2:
-        st.info("Select at least 2 symbols to compare.")
+        st.info(f"Select at least 2 {'indices' if mode == 'Indices' else 'stocks'} to compare.")
         return
 
     try:
         # ── Fetch data ──
         with st.spinner("Loading historical data..."):
-            data_dict = _fetch_data(symbols, start_date, end_date)
+            data_dict = _fetch_data(symbols, start_date, end_date, is_index=(mode == "Indices"))
 
         if len(data_dict) < 2:
-            st.warning("Insufficient data for comparison. Some symbols may have no history.")
+            st.warning("Insufficient data for comparison. Some selections may have no history.")
             return
 
         # ── Charts and stats ──
@@ -61,13 +83,15 @@ def render():
         logger.error(f"m09_index_comparison | {type(e).__name__}: {e}")
 
 
-def _fetch_data(symbols, start_date, end_date):
-    """Fetch historical close data for each symbol. Returns dict[symbol, DataFrame]."""
-    from data.nse_historical import get_stock_history
+def _fetch_data(symbols, start_date, end_date, is_index=False):
+    """Fetch historical close data for each symbol/index. Returns dict[name, DataFrame]."""
+    from data.nse_historical import get_stock_history, get_index_history
+
+    fetch_fn = get_index_history if is_index else get_stock_history
 
     data = {}
     for sym in symbols:
-        df = get_stock_history(sym, start_date, end_date)
+        df = fetch_fn(sym, start_date, end_date)
         if df is not None and not df.empty and len(df) > 1:
             data[sym] = df
     return data

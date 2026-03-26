@@ -1,4 +1,4 @@
-"""Historical OHLCV data fetching — jugaad-data primary, yfinance fallback."""
+"""Historical OHLCV data fetching — yfinance primary (adjusted), jugaad-data fallback."""
 
 from datetime import date, timedelta
 
@@ -26,16 +26,16 @@ def get_stock_history(symbol, start_date=None, end_date=None):
 
     logger.info(f"get_stock_history | symbol={symbol} | {start_date} to {end_date}")
 
-    # Primary: jugaad-data
-    df = _fetch_jugaad(symbol, start_date, end_date)
-    if df is not None and not df.empty:
-        logger.info(f"get_stock_history | symbol={symbol} | OK via jugaad-data | {len(df)} rows")
-        return df
-
-    # Fallback: yfinance
+    # Primary: yfinance (returns split/bonus-adjusted prices by default)
     df = _fetch_yfinance(symbol, start_date, end_date)
     if df is not None and not df.empty:
         logger.info(f"get_stock_history | symbol={symbol} | OK via yfinance | {len(df)} rows")
+        return df
+
+    # Fallback: jugaad-data (unadjusted — may show cliffs on splits/bonuses)
+    df = _fetch_jugaad(symbol, start_date, end_date)
+    if df is not None and not df.empty:
+        logger.info(f"get_stock_history | symbol={symbol} | OK via jugaad-data | {len(df)} rows")
         return df
 
     logger.error(f"get_stock_history | symbol={symbol} | ALL SOURCES FAILED")
@@ -155,6 +155,20 @@ def get_index_history(index_name, start_date=None, end_date=None):
         "INDIA VIX": "^INDIAVIX",
         "NIFTY IT": "^CNXIT",
         "NIFTY NEXT 50": "^NSMIDCP",
+        "NIFTY PHARMA": "^CNXPHARMA",
+        "NIFTY AUTO": "^CNXAUTO",
+        "NIFTY FMCG": "^CNXFMCG",
+        "NIFTY METAL": "^CNXMETAL",
+        "NIFTY REALTY": "^CNXREALTY",
+        "NIFTY ENERGY": "^CNXENERGY",
+        "NIFTY MEDIA": "^CNXMEDIA",
+        "NIFTY PSU BANK": "^CNXPSUBANK",
+        "NIFTY PRIVATE BANK": "^NIFTYPVTBANK",
+        "NIFTY HEALTHCARE INDEX": "^CNXHEALTH",
+        "NIFTY FINANCIAL SERVICES": "^CNXFIN",
+        "NIFTY CONSUMER DURABLES": "^CNXCONSUM",
+        "NIFTY OIL & GAS": "^CNXOILGAS",
+        "NIFTY MIDCAP 50": "^NSEMDCP50",
     }
     yf_symbol = yf_map.get(index_name)
     if yf_symbol:

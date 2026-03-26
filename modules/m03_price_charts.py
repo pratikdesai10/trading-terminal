@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from config import COLORS, NIFTY_50_SYMBOLS, plotly_layout
+from config import COLORS, NIFTY_500_SYMBOLS, plotly_layout
 from utils.logger import logger
 
 
@@ -29,7 +29,7 @@ def render():
     # ── Controls ──
     col_sym, col_period = st.columns([2, 1])
     with col_sym:
-        symbol = st.selectbox("SYMBOL", NIFTY_50_SYMBOLS, index=0, key="m03_symbol")
+        symbol = st.selectbox("SYMBOL", NIFTY_500_SYMBOLS, index=0, key="m03_symbol")
     with col_period:
         period = st.selectbox("PERIOD", list(PERIOD_DAYS.keys()), index=3, key="m03_period")
 

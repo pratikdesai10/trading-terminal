@@ -5,7 +5,7 @@ from datetime import datetime
 import pytz
 import streamlit as st
 
-from config import COLORS, NIFTY_50_SYMBOLS
+from config import COLORS, NIFTY_500_SYMBOLS
 from utils.formatting import format_inr, color_change
 from utils.logger import logger
 
@@ -78,7 +78,7 @@ def _render_add_alert():
     with c_sym:
         symbol = st.selectbox(
             "SYMBOL",
-            options=NIFTY_50_SYMBOLS,
+            options=NIFTY_500_SYMBOLS,
             index=0,
             key="m16_symbol",
             label_visibility="collapsed",

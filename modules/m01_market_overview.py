@@ -37,14 +37,19 @@ def render():
 
 def _render_key_indices():
     """Display NIFTY 50, SENSEX, BANK NIFTY, NIFTY IT as metric cards."""
+    from concurrent.futures import ThreadPoolExecutor
     from data.nse_live import get_index_quote
 
     indices = ["NIFTY 50", "NIFTY BANK", "NIFTY IT", "NIFTY NEXT 50"]
-    cols = st.columns(len(indices))
 
+    # Fetch all indices in parallel
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        quotes = dict(zip(indices, executor.map(get_index_quote, indices)))
+
+    cols = st.columns(len(indices))
     for col, idx_name in zip(cols, indices):
         with col:
-            quote = get_index_quote(idx_name)
+            quote = quotes[idx_name]
             if quote:
                 st.metric(
                     label=idx_name,
@@ -59,9 +64,9 @@ def _render_market_breadth():
     """Show Advances / Declines / Unchanged."""
     from data.nse_live import get_market_breadth
 
-    st.markdown("##### MARKET BREADTH")
+    st.markdown("##### NIFTY 500 BREADTH")
 
-    breadth = get_market_breadth()
+    breadth = get_market_breadth("NIFTY 500")
     adv = breadth["advances"]
     dec = breadth["declines"]
     unc = breadth["unchanged"]
@@ -168,7 +173,10 @@ def _render_top_movers():
     """Show top 5 gainers and losers."""
     from data.nse_live import get_top_gainers_losers
 
-    gainers, losers = get_top_gainers_losers("NIFTY 50", n=5)
+    # Try NIFTY 500 first, fall back to NIFTY 50
+    gainers, losers = get_top_gainers_losers("NIFTY 500", n=5)
+    if gainers.empty and losers.empty:
+        gainers, losers = get_top_gainers_losers("NIFTY 50", n=5)
 
     st.markdown("##### TOP GAINERS")
     if not gainers.empty:

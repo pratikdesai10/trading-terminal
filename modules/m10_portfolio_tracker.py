@@ -6,7 +6,8 @@ from datetime import date, datetime
 import plotly.graph_objects as go
 import streamlit as st
 
-from config import COLORS, NIFTY_50, NIFTY_50_SYMBOLS, SECTOR_COLORS, plotly_layout
+from config import COLORS, NIFTY_50, NIFTY_500_SYMBOLS, SECTOR_COLORS, plotly_layout
+from data.nifty500 import get_nifty_500_map
 from utils.formatting import format_inr, format_pct, color_change
 from utils.logger import logger
 
@@ -85,7 +86,7 @@ def _render_controls():
 
         with c_sym:
             symbol = st.selectbox(
-                "SYMBOL", NIFTY_50_SYMBOLS, index=0,
+                "SYMBOL", NIFTY_500_SYMBOLS, index=0,
                 label_visibility="collapsed",
             )
         with c_qty:
@@ -387,7 +388,7 @@ def _render_holdings_table(holdings, live_data):
         qty = h["qty"]
         avg = h["avg_price"]
         buy_date = h.get("buy_date", "—")
-        sector = NIFTY_50.get(sym, "Other")
+        sector = get_nifty_500_map().get(sym, "Other")
 
         ld = live_data.get(sym)
         if ld:
@@ -499,7 +500,7 @@ def _render_sector_pie(holdings, live_data):
     sector_values = {}
     for h in holdings:
         sym = h["symbol"]
-        sector = NIFTY_50.get(sym, "Other")
+        sector = get_nifty_500_map().get(sym, "Other")
         ld = live_data.get(sym)
         ltp = ld["ltp"] if ld else h["avg_price"]
         val = h["qty"] * ltp

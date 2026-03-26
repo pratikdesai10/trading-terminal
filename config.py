@@ -143,6 +143,11 @@ NIFTY_200_EXTRA = [
 _nifty_100_set = set(NIFTY_100_SYMBOLS)
 NIFTY_200_SYMBOLS = NIFTY_100_SYMBOLS + [s for s in NIFTY_200_EXTRA if s not in _nifty_100_set]
 
+# ── Nifty 500 (loaded from data/nifty500.py at runtime via get_nifty_500_symbols()) ──
+# Import the static fallback keys as a baseline for config-level references.
+from data.nifty500 import _STATIC_NIFTY_500, get_nifty_500_symbols
+NIFTY_500_SYMBOLS = sorted(_STATIC_NIFTY_500.keys())
+
 # ── Sector colors for charts ──
 SECTOR_COLORS = {
     "Financial": "#3399FF",
@@ -161,6 +166,10 @@ SECTOR_COLORS = {
     "Mining": "#996633",
     "Defence": "#669999",
     "Conglomerate": "#CC6699",
+    "Chemicals": "#CCFF33",
+    "Realty": "#FF6699",
+    "Media": "#66CCFF",
+    "Other": "#888888",
 }
 
 # ── Key Indices ──

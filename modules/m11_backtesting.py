@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from config import COLORS, NIFTY_50_SYMBOLS, plotly_layout
+from config import COLORS, NIFTY_500_SYMBOLS, plotly_layout
 from utils.logger import logger
 
 
@@ -58,7 +58,7 @@ def render():
             unsafe_allow_html=True,
         )
         symbol = st.selectbox(
-            "SYMBOL", NIFTY_50_SYMBOLS, index=0,
+            "SYMBOL", NIFTY_500_SYMBOLS, index=0,
             key="m11_symbol", label_visibility="collapsed",
         )
     with col_strat:

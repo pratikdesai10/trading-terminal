@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from config import DEFAULT_WATCHLIST, NIFTY_50_SYMBOLS
+from config import DEFAULT_WATCHLIST, NIFTY_500_SYMBOLS
 from utils.formatting import format_inr, format_volume
 from utils.logger import logger
 
@@ -22,7 +22,7 @@ def render():
     with col_add:
         new_symbol = st.selectbox(
             "ADD SYMBOL",
-            options=[s for s in NIFTY_50_SYMBOLS if s not in st.session_state.watchlist],
+            options=[s for s in NIFTY_500_SYMBOLS if s not in st.session_state.watchlist],
             index=None,
             placeholder="Select symbol to add...",
             key="wl_add_symbol",
