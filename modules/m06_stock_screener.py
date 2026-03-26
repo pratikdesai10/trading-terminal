@@ -3,7 +3,8 @@
 import pandas as pd
 import streamlit as st
 
-from config import COLORS, NIFTY_50, NIFTY_50_SYMBOLS, NIFTY_100_SYMBOLS, NIFTY_200_SYMBOLS
+from config import COLORS, NIFTY_50, NIFTY_50_SYMBOLS, NIFTY_100_SYMBOLS, NIFTY_200_SYMBOLS, NIFTY_500_SYMBOLS
+from data.nifty500 import get_nifty_500_map
 from utils.logger import logger
 
 
@@ -19,7 +20,7 @@ def render():
             unsafe_allow_html=True,
         )
         universe = st.selectbox(
-            "UNIVERSE", ["Nifty 50", "Nifty 100", "Nifty 200"],
+            "UNIVERSE", ["Nifty 50", "Nifty 100", "Nifty 200", "Nifty 500"],
             index=0, key="m06_universe", label_visibility="collapsed",
         )
 
@@ -188,15 +189,18 @@ def _fetch_screener_data(universe="Nifty 50", selected_sectors_tuple=None):
     from analytics.screener_engine import fetch_screener_data
 
     # Resolve symbol list based on universe
-    if universe == "Nifty 200":
+    if universe == "Nifty 500":
+        all_symbols = NIFTY_500_SYMBOLS
+    elif universe == "Nifty 200":
         all_symbols = NIFTY_200_SYMBOLS
     elif universe == "Nifty 100":
         all_symbols = NIFTY_100_SYMBOLS
     else:
         all_symbols = NIFTY_50_SYMBOLS
 
-    # Build sector dict — NIFTY_50 has known mappings; others get empty string
-    sector_map = {s: NIFTY_50.get(s, "") for s in all_symbols}
+    # Build sector dict — use Nifty 500 map for full coverage
+    n500_map = get_nifty_500_map()
+    sector_map = {s: n500_map.get(s, NIFTY_50.get(s, "")) for s in all_symbols}
 
     # Filter symbols by sector if needed
     if selected_sectors_tuple:

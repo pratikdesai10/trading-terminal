@@ -1,9 +1,32 @@
 """Live NSE data fetching via jugaad-data and nsetools."""
 
+import time
+
 import pandas as pd
 import streamlit as st
 
 from utils.logger import logger
+
+
+def _retry_call(func, *args, max_attempts=2, delay=0.3, label=""):
+    """Retry an API call with backoff. Returns result or raises last exception."""
+    last_exc = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return func(*args)
+        except Exception as e:
+            last_exc = e
+            if attempt < max_attempts:
+                logger.info(f"retry | {label} | attempt {attempt} failed: {type(e).__name__} | retrying")
+                time.sleep(delay * attempt)
+    raise last_exc
+
+
+@st.cache_resource(ttl=1800)
+def _get_nse_client():
+    """Singleton NSELive client — reused across calls, refreshed every 30 min."""
+    from jugaad_data.nse import NSELive
+    return NSELive()
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -11,9 +34,8 @@ def get_stock_quote(symbol):
     """Get live quote for a single NSE stock."""
     logger.info(f"get_stock_quote | symbol={symbol} | trying jugaad-data")
     try:
-        from jugaad_data.nse import NSELive
-        nse = NSELive()
-        data = nse.stock_quote(symbol)
+        nse = _get_nse_client()
+        data = _retry_call(nse.stock_quote, symbol, label=f"stock_quote({symbol})")
         if data and "priceInfo" in data:
             price_info = data["priceInfo"]
             info = data.get("info", {})
@@ -75,9 +97,8 @@ def get_index_quote(index_name):
     """Get live quote for an NSE index."""
     logger.info(f"get_index_quote | index={index_name}")
     try:
-        from jugaad_data.nse import NSELive
-        nse = NSELive()
-        data = nse.live_index(index_name)
+        nse = _get_nse_client()
+        data = _retry_call(nse.live_index, index_name, label=f"live_index({index_name})")
         if data and "data" in data:
             # Find the index row — NSE uses "symbol" field, not "index"
             for item in data["data"]:
@@ -108,13 +129,12 @@ def get_index_quote(index_name):
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def get_market_breadth():
-    """Get market breadth (advances, declines, unchanged) for NIFTY 50."""
-    logger.info("get_market_breadth | fetching NIFTY 50 breadth")
+def get_market_breadth(index_name="NIFTY 500"):
+    """Get market breadth (advances, declines, unchanged) for an index."""
+    logger.info(f"get_market_breadth | fetching {index_name} breadth")
     try:
-        from jugaad_data.nse import NSELive
-        nse = NSELive()
-        data = nse.live_index("NIFTY 50")
+        nse = _get_nse_client()
+        data = _retry_call(nse.live_index, index_name, label=f"breadth({index_name})")
         if data and "advance" in data:
             adv = data["advance"]
             result = {
@@ -122,19 +142,16 @@ def get_market_breadth():
                 "declines": _safe_int(adv.get("declines", 0)),
                 "unchanged": _safe_int(adv.get("unchanged", 0)),
             }
-            logger.info(f"get_market_breadth | OK | adv={result['advances']} dec={result['declines']} unc={result['unchanged']}")
+            logger.info(f"get_market_breadth | {index_name} | OK | adv={result['advances']} dec={result['declines']} unc={result['unchanged']}")
             return result
     except Exception as e:
-        logger.error(f"get_market_breadth | FAILED: {type(e).__name__}: {e}")
+        logger.error(f"get_market_breadth | {index_name} | FAILED: {type(e).__name__}: {e}")
 
-    # Fallback: try from index quote
-    quote = get_index_quote("NIFTY 50")
-    if quote:
-        return {
-            "advances": quote.get("advances", 0),
-            "declines": quote.get("declines", 0),
-            "unchanged": quote.get("unchanged", 0),
-        }
+    # Fallback: try NIFTY 50 if broader index failed
+    if index_name != "NIFTY 50":
+        logger.info(f"get_market_breadth | falling back to NIFTY 50")
+        return get_market_breadth("NIFTY 50")
+
     logger.warning("get_market_breadth | ALL SOURCES FAILED")
     return {"advances": 0, "declines": 0, "unchanged": 0}
 
@@ -144,9 +161,8 @@ def get_top_gainers_losers(index_name="NIFTY 50", n=5):
     """Get top N gainers and losers from an index. Returns (gainers_df, losers_df)."""
     logger.info(f"get_top_gainers_losers | index={index_name} | n={n}")
     try:
-        from jugaad_data.nse import NSELive
-        nse = NSELive()
-        data = nse.live_index(index_name)
+        nse = _get_nse_client()
+        data = _retry_call(nse.live_index, index_name, label=f"gainers_losers({index_name})")
         if data and "data" in data:
             records = []
             for item in data["data"]:
@@ -182,23 +198,35 @@ def get_top_gainers_losers(index_name="NIFTY 50", n=5):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_sectoral_indices():
-    """Fetch sectoral index performance. Returns a DataFrame sorted by % Change."""
+    """Fetch sectoral index performance in parallel. Returns a DataFrame sorted by % Change."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from config import SECTORAL_INDICES
     logger.info(f"get_sectoral_indices | fetching {len(SECTORAL_INDICES)} indices")
 
     records = []
     failed = []
-    for idx_name in SECTORAL_INDICES:
-        quote = get_index_quote(idx_name)
-        if quote:
-            records.append({
-                "Index": idx_name.replace("NIFTY ", ""),
-                "Last": quote["last"],
-                "Change": quote["change"],
-                "% Change": quote["pChange"],
-            })
-        else:
-            failed.append(idx_name)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        future_to_idx = {
+            executor.submit(get_index_quote, idx_name): idx_name
+            for idx_name in SECTORAL_INDICES
+        }
+        for future in as_completed(future_to_idx):
+            idx_name = future_to_idx[future]
+            try:
+                quote = future.result(timeout=10)
+                if quote:
+                    records.append({
+                        "Index": idx_name.replace("NIFTY ", ""),
+                        "Last": quote["last"],
+                        "Change": quote["change"],
+                        "% Change": quote["pChange"],
+                    })
+                else:
+                    failed.append(idx_name)
+            except Exception as e:
+                logger.warning(f"get_sectoral_indices | {idx_name} | {type(e).__name__}: {e}")
+                failed.append(idx_name)
 
     if failed:
         logger.warning(f"get_sectoral_indices | failed indices: {failed}")

@@ -1,11 +1,11 @@
 """Module 17: Paper Trading (Simulated Trading)."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytz
 import streamlit as st
 
-from config import COLORS, NIFTY_200_SYMBOLS
+from config import COLORS, NIFTY_500_SYMBOLS
 from data.database import PAPER_DEFAULT_BALANCE
 from utils.formatting import format_inr, color_change
 from utils.logger import logger
@@ -26,13 +26,14 @@ def render():
 
     st.divider()
 
-    # ── Summary metrics ──
-    _render_summary()
-
-    st.divider()
-
-    # ── Open positions ──
-    _render_positions()
+    # ── Live dashboard (auto-refresh summary + positions) ──
+    auto_refresh = st.checkbox("Auto-refresh P&L (2s)", value=True, key="m17_auto_refresh")
+    if auto_refresh:
+        _live_dashboard()
+    else:
+        _render_summary()
+        st.divider()
+        _render_positions()
 
     st.divider()
 
@@ -48,6 +49,17 @@ def render():
 
     # ── Controls ──
     _render_controls()
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Live Dashboard (auto-refreshing fragment)
+# ─────────────────────────────────────────────────────────────────────
+@st.fragment(run_every=timedelta(seconds=2))
+def _live_dashboard():
+    """Auto-refreshing summary + positions — reruns every 2s independently."""
+    _render_summary()
+    st.divider()
+    _render_positions()
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -144,7 +156,7 @@ def _render_order_form():
 
     with c_sym:
         symbol = st.selectbox(
-            "SYMBOL", NIFTY_200_SYMBOLS, index=0,
+            "SYMBOL", NIFTY_500_SYMBOLS, index=0,
             key="m17_symbol", label_visibility="collapsed",
         )
 

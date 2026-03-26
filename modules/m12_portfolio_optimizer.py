@@ -12,7 +12,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from scipy.optimize import minimize
 
-from config import COLORS, NIFTY_50_SYMBOLS, SECTOR_COLORS, NIFTY_50, plotly_layout
+from config import COLORS, NIFTY_500_SYMBOLS, SECTOR_COLORS, plotly_layout
+from data.nifty500 import get_nifty_500_map
 from utils.logger import logger
 from analytics.risk_metrics import (
     compute_var,
@@ -51,7 +52,7 @@ def render():
     with col_stocks:
         symbols = st.multiselect(
             "SELECT STOCKS (min 2, max 15)",
-            NIFTY_50_SYMBOLS,
+            NIFTY_500_SYMBOLS,
             default=["RELIANCE", "TCS", "HDFCBANK", "INFY", "ITC"],
             max_selections=15,
             key="m12_symbols",
@@ -648,7 +649,7 @@ def _render_weights_table(symbols, weights):
         if w < 0.001:  # skip negligible weights
             continue
         sym = symbols[idx]
-        sector = NIFTY_50.get(sym, "—")
+        sector = get_nifty_500_map().get(sym, "—")
         sector_color = SECTOR_COLORS.get(sector, COLORS["text"])
 
         # Weight bar (visual indicator)
@@ -726,7 +727,7 @@ def _render_sector_allocation(symbols, weights):
     for sym, w in zip(symbols, weights):
         if w < 0.001:
             continue
-        sector = NIFTY_50.get(sym, "Other")
+        sector = get_nifty_500_map().get(sym, "Other")
         sector_weights[sector] = sector_weights.get(sector, 0) + w
 
     if not sector_weights:

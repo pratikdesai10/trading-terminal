@@ -3,7 +3,7 @@
 import streamlit as st
 import plotly.graph_objects as go
 
-from config import NIFTY_50_SYMBOLS, COLORS, plotly_layout
+from config import NIFTY_500_SYMBOLS, COLORS, plotly_layout
 from utils.formatting import format_inr, format_crore, escape_html
 
 
@@ -11,7 +11,7 @@ def render():
     """Render the Company Description module."""
     st.markdown("### COMPANY DESCRIPTION")
 
-    symbol = st.selectbox("SYMBOL", NIFTY_50_SYMBOLS, index=0, key="m04_symbol")
+    symbol = st.selectbox("SYMBOL", NIFTY_500_SYMBOLS, index=0, key="m04_symbol")
 
     from data.fundamentals import get_company_info
     with st.spinner("Loading company data..."):

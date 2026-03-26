@@ -42,8 +42,8 @@ def get_option_chain(symbol, expiry=None):
 def _fetch_jugaad(symbol):
     """Fetch option chain via jugaad-data NSELive."""
     try:
-        from jugaad_data.nse import NSELive
-        nse = NSELive()
+        from data.nse_live import _get_nse_client
+        nse = _get_nse_client()
 
         # For indices, use index_option_chain; for stocks, use stock_quote
         if symbol in ("NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"):

@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from config import NIFTY_50_SYMBOLS, COLORS, plotly_layout
+from config import NIFTY_500_SYMBOLS, COLORS, plotly_layout
 
 
 # Key rows to display from each financial statement
@@ -40,7 +40,7 @@ def render():
 
     col_sym, col_period = st.columns([2, 1])
     with col_sym:
-        symbol = st.selectbox("SYMBOL", NIFTY_50_SYMBOLS, index=0, key="m05_symbol")
+        symbol = st.selectbox("SYMBOL", NIFTY_500_SYMBOLS, index=0, key="m05_symbol")
     with col_period:
         period = st.radio("PERIOD", ["Annual", "Quarterly"], horizontal=True, key="m05_period")
 
@@ -219,7 +219,7 @@ def _render_peer_comparison(symbol):
 
     peers = st.multiselect(
         "SELECT PEERS (up to 4)",
-        [s for s in NIFTY_50_SYMBOLS if s != symbol],
+        [s for s in NIFTY_500_SYMBOLS if s != symbol],
         default=[],
         max_selections=4,
         key="m05_peers",

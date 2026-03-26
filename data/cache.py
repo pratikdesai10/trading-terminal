@@ -1,7 +1,10 @@
-"""Simple TTL cache decorator for data fetching."""
+"""Simple TTL cache and retry utilities for data fetching."""
 
+import logging
 import time
 from functools import wraps
+
+_logger = logging.getLogger("terminal")
 
 _cache = {}
 _cache_ttls = {}  # Track TTL per key for correct expiry
@@ -56,3 +59,39 @@ def clear_expired():
     for k in expired:
         del _cache[k]
         _cache_ttls.pop(k, None)
+
+
+def retry(max_attempts=2, delay=0.5, backoff=2.0, exceptions=(Exception,)):
+    """Decorator that retries a function on transient failures.
+
+    Args:
+        max_attempts: Total attempts (1 = no retry, 2 = one retry).
+        delay: Initial delay between retries in seconds.
+        backoff: Multiplier for delay after each retry.
+        exceptions: Tuple of exception types to catch and retry.
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exc = None
+            wait = delay
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    last_exc = e
+                    if attempt < max_attempts:
+                        _logger.info(
+                            f"retry | {func.__name__} | attempt {attempt}/{max_attempts} "
+                            f"failed: {type(e).__name__}: {e} | retrying in {wait:.1f}s"
+                        )
+                        time.sleep(wait)
+                        wait *= backoff
+                    else:
+                        _logger.warning(
+                            f"retry | {func.__name__} | all {max_attempts} attempts failed: "
+                            f"{type(e).__name__}: {e}"
+                        )
+            raise last_exc
+        return wrapper
+    return decorator

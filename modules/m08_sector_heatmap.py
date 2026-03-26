@@ -3,7 +3,8 @@
 import plotly.graph_objects as go
 import streamlit as st
 
-from config import COLORS, NIFTY_50, plotly_layout
+from config import COLORS, NIFTY_50, NIFTY_100_SYMBOLS, plotly_layout
+from data.nifty500 import get_nifty_500_map
 from utils.logger import logger
 
 
@@ -11,18 +12,56 @@ def render():
     """Render the Sector Heatmap module."""
     st.markdown("### SECTOR HEATMAP")
 
+    # ── Controls: universe + sector filter ──
+    col_univ, col_sector = st.columns([1, 3])
+
+    with col_univ:
+        universe = st.selectbox(
+            "UNIVERSE", ["Nifty 50", "Nifty 100", "Nifty 500"],
+            index=0, key="m08_universe", label_visibility="collapsed",
+        )
+
+    # Build symbol-to-sector map based on universe
+    if universe == "Nifty 500":
+        symbol_sector_map = get_nifty_500_map()
+    elif universe == "Nifty 100":
+        n500 = get_nifty_500_map()
+        symbol_sector_map = {s: n500.get(s, NIFTY_50.get(s, "Other")) for s in NIFTY_100_SYMBOLS}
+    else:
+        symbol_sector_map = dict(NIFTY_50)
+
+    all_sectors = sorted(set(symbol_sector_map.values()))
+
+    with col_sector:
+        selected_sectors = st.multiselect(
+            "SECTORS", all_sectors, default=all_sectors,
+            key="m08_sectors", label_visibility="collapsed",
+        )
+
+    if not selected_sectors:
+        selected_sectors = all_sectors
+
+    # Filter symbols by sector
+    filtered = {s: sec for s, sec in symbol_sector_map.items() if sec in selected_sectors}
+    total = len(filtered)
+
+    if total > 150:
+        st.warning(f"Loading {total} stocks — this may take a moment. Consider filtering by sector.")
+
     try:
-        with st.spinner("Loading market data for heatmap..."):
-            data = _fetch_heatmap_data()
+        # Convert to hashable tuples for cache key
+        symbols_tuple = tuple(sorted(filtered.keys()))
+        sectors_tuple = tuple(sorted(selected_sectors))
+
+        with st.spinner(f"Loading {total} stocks in parallel..."):
+            data = _fetch_heatmap_data(symbols_tuple, symbol_sector_map)
 
         if not data:
             st.warning("Unable to load heatmap data")
             return
 
         loaded = len(data)
-        total = len(NIFTY_50)
-
-        fig = _build_treemap(data)
+        fig = _build_treemap(data, universe)
         st.plotly_chart(fig, use_container_width=True)
 
         st.caption(f"{loaded}/{total} stocks loaded | Sized equally within sectors, colored by daily % change")
@@ -31,25 +70,40 @@ def render():
         logger.error(f"m08_sector_heatmap | {type(e).__name__}: {e}")
 
 
-def _fetch_heatmap_data():
-    """Fetch live quotes for all Nifty 50 stocks. Returns list of dicts."""
+@st.cache_data(ttl=60, show_spinner=False)
+def _fetch_heatmap_data(symbols_tuple, _symbol_sector_map):
+    """Fetch live quotes for given symbols in parallel. Returns list of dicts."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from data.nse_live import get_stock_quote
 
     records = []
-    for symbol, sector in NIFTY_50.items():
-        quote = get_stock_quote(symbol)
-        if quote is None:
-            continue
-        records.append({
-            "symbol": symbol,
-            "sector": sector,
-            "lastPrice": quote["lastPrice"],
-            "pChange": quote["pChange"],
-        })
+    max_workers = min(20, len(symbols_tuple))
+    try:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_sym = {
+                executor.submit(get_stock_quote, symbol): symbol
+                for symbol in symbols_tuple
+            }
+            for future in as_completed(future_to_sym):
+                symbol = future_to_sym[future]
+                try:
+                    quote = future.result(timeout=10)
+                    if quote is not None:
+                        records.append({
+                            "symbol": symbol,
+                            "sector": _symbol_sector_map.get(symbol, "Other"),
+                            "lastPrice": quote["lastPrice"],
+                            "pChange": quote["pChange"],
+                        })
+                except Exception as e:
+                    logger.warning(f"_fetch_heatmap_data | {symbol} | {type(e).__name__}: {e}")
+    except Exception as e:
+        logger.error(f"_fetch_heatmap_data | batch fetch failed: {type(e).__name__}: {e}")
+
     return records
 
 
-def _build_treemap(data):
+def _build_treemap(data, universe_label="NIFTY 50"):
     """Build a Plotly treemap from heatmap data."""
     labels = []
     parents = []
@@ -57,7 +111,6 @@ def _build_treemap(data):
     colors = []
     custom_text = []
 
-    # Root
     sectors_seen = set()
 
     for rec in data:
@@ -69,7 +122,7 @@ def _build_treemap(data):
         # Add sector parent if not seen
         if sector not in sectors_seen:
             labels.append(sector)
-            parents.append("NIFTY 50")
+            parents.append(universe_label)
             values.append(0)
             colors.append(0)
             custom_text.append("")
@@ -83,7 +136,7 @@ def _build_treemap(data):
         custom_text.append(f"₹{price:,.2f} | {pct:+.2f}%")
 
     # Root node
-    labels.insert(0, "NIFTY 50")
+    labels.insert(0, universe_label)
     parents.insert(0, "")
     values.insert(0, 0)
     colors.insert(0, 0)

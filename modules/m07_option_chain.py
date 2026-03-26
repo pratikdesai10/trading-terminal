@@ -3,12 +3,12 @@
 import plotly.graph_objects as go
 import streamlit as st
 
-from config import COLORS, NIFTY_50_SYMBOLS, plotly_layout
+from config import COLORS, NIFTY_500_SYMBOLS, plotly_layout
 from utils.logger import logger
 
 
 # F&O symbols (indices + top stocks)
-FNO_SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"] + NIFTY_50_SYMBOLS
+FNO_SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"] + NIFTY_500_SYMBOLS
 
 
 def render():
