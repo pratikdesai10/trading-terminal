@@ -261,8 +261,8 @@ def _fetch_screener_data(universe="Nifty 50", selected_sectors_tuple=None):
                                 df.at[idx, "RSI"] = round(rsi_val, 1) if pd.notna(rsi_val) else 0.0
                         except Exception as e:
                             logger.debug(f"m06 | RSI calc error for stock: {e}")
-        except Exception:
-            logger.warning("m06_screener | batch RSI download failed")
+        except Exception as e:
+            logger.warning(f"m06_screener | batch RSI download failed: {e}")
     except ImportError:
         logger.warning("m06_screener | yfinance/ta not available for RSI calc")
 

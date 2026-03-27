@@ -3,6 +3,8 @@
 import os
 from datetime import datetime, timedelta, timezone
 
+import re
+
 import bcrypt
 import jwt
 import streamlit as st
@@ -14,11 +16,16 @@ from utils.logger import logger
 def _get_secret_key():
     """Read JWT secret from Streamlit secrets, env var, or raise."""
     try:
-        return st.secrets["JWT_SECRET"]
+        secret = st.secrets["JWT_SECRET"]
+        if len(secret) < 32:
+            raise RuntimeError("JWT_SECRET must be at least 32 characters for security.")
+        return secret
     except (FileNotFoundError, KeyError):
         pass
     val = os.environ.get("JWT_SECRET")
     if val:
+        if len(val) < 32:
+            raise RuntimeError("JWT_SECRET must be at least 32 characters for security.")
         return val
     raise RuntimeError(
         "JWT_SECRET not configured. "
@@ -156,11 +163,11 @@ def _render_login_form():
             token = _create_token(user["id"], user["username"])
             st.session_state["auth_token"] = token
             st.session_state["user"] = {"user_id": user["id"], "username": user["username"]}
-            logger.info(f"auth | login success | user={username}")
+            logger.info(f"auth | login success | user={username!r}")
             st.rerun()
         else:
             st.error("Invalid username or password.")
-            logger.warning(f"auth | login failed | user={username}")
+            logger.warning(f"auth | login failed | user={username!r}")
 
 
 def _render_signup_form():
@@ -176,10 +183,10 @@ def _render_signup_form():
         if not username or not email or not password:
             st.error("All fields are required.")
             return
-        if len(username) < 3:
-            st.error("Username must be at least 3 characters.")
+        if not re.match(r"^[a-zA-Z0-9_]{3,30}$", username):
+            st.error("Username must be 3-30 characters (letters, numbers, underscore only).")
             return
-        if "@" not in email:
+        if not re.match(r"^[^@]+@[^@]+\.[^@]+$", email):
             st.error("Enter a valid email address.")
             return
         if len(password) < 6:
@@ -198,5 +205,5 @@ def _render_signup_form():
         token = _create_token(user["id"], user["username"])
         st.session_state["auth_token"] = token
         st.session_state["user"] = {"user_id": user["id"], "username": user["username"]}
-        logger.info(f"auth | signup success | user={username}")
+        logger.info(f"auth | signup success | user={username!r}")
         st.rerun()

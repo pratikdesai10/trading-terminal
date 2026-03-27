@@ -90,6 +90,7 @@ def _db():
         yield conn
     except sqlite3.Error as e:
         logger.error(f"database | sqlite3 error: {type(e).__name__}: {e}")
+        conn.rollback()
         raise
     finally:
         conn.close()

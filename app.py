@@ -8,6 +8,7 @@ import pytz
 
 from theme import apply_theme
 from utils.logger import new_request_id, logger
+from utils.formatting import escape_html
 
 # ── Page config (must be first Streamlit command) ──
 st.set_page_config(
@@ -66,7 +67,7 @@ with col_user:
     st.markdown(
         f'<div style="text-align:right;padding:4px 0;font-family:monospace;font-size:11px">'
         f'<span style="color:#888888">USER:</span> '
-        f'<span style="color:#FF9900">{user["username"].upper()}</span></div>',
+        f'<span style="color:#FF9900">{escape_html(user["username"].upper())}</span></div>',
         unsafe_allow_html=True,
     )
     if st.button("LOGOUT", key="logout_btn", use_container_width=True):
