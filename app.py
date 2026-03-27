@@ -26,9 +26,16 @@ if "db_initialized" not in st.session_state:
     init_db()
     st.session_state.db_initialized = True
 
+# ── Authentication gate ──
+from auth.auth import require_auth, logout
+
+user = require_auth()  # renders login page and st.stop() if not authenticated
+user_id = user["user_id"]
+st.session_state["user_id"] = user_id
+
 # ── Request tracing ──
 rid = new_request_id()
-logger.info(f"PAGE RENDER START | request_id={rid}")
+logger.info(f"PAGE RENDER START | request_id={rid} | user={user['username']}")
 
 # ── Header ──
 ist = pytz.timezone("Asia/Kolkata")
@@ -44,15 +51,26 @@ else:
     status_class = "status-closed"
     status_text = "● MARKET CLOSED"
 
-st.markdown(
-    f'<div class="terminal-header">'
-    f'<span class="title">INDIAN BLOOMBERG TERMINAL</span>'
-    f'<span class="info">'
-    f'<span class="{status_class}">{status_text}</span>'
-    f'<span class="datetime">{now.strftime("%d %b %Y  %H:%M:%S IST")}</span>'
-    f'</span></div>',
-    unsafe_allow_html=True,
-)
+col_header, col_user = st.columns([9, 1])
+with col_header:
+    st.markdown(
+        f'<div class="terminal-header">'
+        f'<span class="title">INDIAN BLOOMBERG TERMINAL</span>'
+        f'<span class="info">'
+        f'<span class="{status_class}">{status_text}</span>'
+        f'<span class="datetime">{now.strftime("%d %b %Y  %H:%M:%S IST")}</span>'
+        f'</span></div>',
+        unsafe_allow_html=True,
+    )
+with col_user:
+    st.markdown(
+        f'<div style="text-align:right;padding:4px 0;font-family:monospace;font-size:11px">'
+        f'<span style="color:#888888">USER:</span> '
+        f'<span style="color:#FF9900">{user["username"].upper()}</span></div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("LOGOUT", key="logout_btn", use_container_width=True):
+        logout()
 
 # ── Tab navigation (lazy rendering — only active tab executes) ──
 TAB_CONFIG = [

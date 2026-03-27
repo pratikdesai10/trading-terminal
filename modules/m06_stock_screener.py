@@ -259,8 +259,8 @@ def _fetch_screener_data(universe="Nifty 50", selected_sectors_tuple=None):
                             if len(series) >= 15:
                                 rsi_val = RSIIndicator(series, window=14).rsi().iloc[-1]
                                 df.at[idx, "RSI"] = round(rsi_val, 1) if pd.notna(rsi_val) else 0.0
-                        except Exception:
-                            pass  # leave as 0.0
+                        except Exception as e:
+                            logger.debug(f"m06 | RSI calc error for stock: {e}")
         except Exception:
             logger.warning("m06_screener | batch RSI download failed")
     except ImportError:

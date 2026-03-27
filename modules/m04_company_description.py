@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 
 from config import NIFTY_500_SYMBOLS, COLORS, plotly_layout
 from utils.formatting import format_inr, format_crore, escape_html
+from utils.logger import logger
 
 
 def render():
@@ -39,7 +40,8 @@ def _safe(info, key, fmt_fn=None, default="—"):
         if fmt_fn:
             return fmt_fn(val)
         return str(val)
-    except Exception:
+    except Exception as e:
+        logger.debug(f"m04 | _safe format error for key={key}: {e}")
         return default
 
 
@@ -141,7 +143,8 @@ def _render_shareholding(symbol):
         if major is None or major.empty:
             st.info("Shareholding data not available")
             return
-    except Exception:
+    except Exception as e:
+        logger.debug(f"m04 | shareholding fetch error: {e}")
         st.info("Shareholding data not available")
         return
 
@@ -162,7 +165,8 @@ def _render_shareholding(symbol):
                 promoter_pct = val * 100  # yfinance returns as fraction (0.77 = 77%)
             elif "institutionspercentheld" in label or ("institutions" in label and "float" not in label and "count" not in label):
                 institutional_pct = val * 100
-    except Exception:
+    except Exception as e:
+        logger.debug(f"m04 | shareholding parse error: {e}")
         st.info("Shareholding data not available")
         return
 

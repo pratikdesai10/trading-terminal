@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from config import NIFTY_500_SYMBOLS, COLORS, plotly_layout
+from utils.logger import logger
 
 
 # Key rows to display from each financial statement
@@ -105,7 +106,8 @@ def _render_statement(symbol, stmt_type, period_key):
     for col in df_display.columns:
         try:
             col_headers.append(pd.Timestamp(col).strftime("%b %Y"))
-        except Exception:
+        except Exception as e:
+            logger.debug(f"m05 | date format error for col={col}: {e}")
             col_headers.append(str(col))
 
     # Build HTML table
@@ -238,8 +240,8 @@ def _render_peer_comparison(symbol):
                 info = get_company_info(sym)
                 if info:
                     infos[sym] = info
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"m05 | peer data fetch error for {sym}: {e}")
 
     if len(infos) < 2:
         st.warning("Not enough data to compare. Try different peers.")
@@ -334,7 +336,8 @@ def _render_trend_sparklines(symbol):
     with st.spinner("Loading trend data..."):
         try:
             data = get_income_statement(symbol)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"m05 | income statement fetch error for {symbol}: {e}")
             st.warning(f"Could not fetch income statement for {symbol}")
             return
 

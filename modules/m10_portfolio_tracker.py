@@ -20,9 +20,10 @@ def render():
     st.markdown("### PORTFOLIO TRACKER")
 
     # Initialize session state (load from DB)
+    user_id = st.session_state["user_id"]
     if _STATE_KEY not in st.session_state:
         from data.database import load_holdings
-        st.session_state[_STATE_KEY] = load_holdings()
+        st.session_state[_STATE_KEY] = load_holdings(user_id)
 
     # ── Controls: Add holding / Import-Export ──
     _render_controls()
@@ -73,6 +74,7 @@ def render():
 # ─────────────────────────────────────────────────────────────────────
 def _render_controls():
     """Render add-holding form and import/export buttons."""
+    user_id = st.session_state["user_id"]
 
     col_add, col_io = st.columns([3, 1])
 
@@ -114,7 +116,7 @@ def _render_controls():
                     "buy_date": buy_date.isoformat(),
                 }
                 from data.database import save_holding
-                new_holding["_db_id"] = save_holding(new_holding)
+                new_holding["_db_id"] = save_holding(user_id, new_holding)
                 st.session_state[_STATE_KEY].append(new_holding)
                 logger.info(
                     f"m10_portfolio | ADD | {symbol} qty={qty} "
@@ -148,9 +150,9 @@ def _render_controls():
                             st.error(f"Invalid holdings at indices: {invalid[:5]}. Each must have: {', '.join(sorted(required))}")
                         else:
                             from data.database import replace_all_holdings
-                            replace_all_holdings(data)
+                            replace_all_holdings(user_id, data)
                             from data.database import load_holdings
-                            st.session_state[_STATE_KEY] = load_holdings()
+                            st.session_state[_STATE_KEY] = load_holdings(user_id)
                             logger.info(
                                 f"m10_portfolio | IMPORT | {len(data)} holdings loaded"
                             )
@@ -196,7 +198,7 @@ def _render_controls():
                 removed = holdings.pop(rm_idx)
                 if "_db_id" in removed:
                     from data.database import remove_holding
-                    remove_holding(removed["_db_id"])
+                    remove_holding(user_id, removed["_db_id"])
                 logger.info(f"m10_portfolio | REMOVE | {removed['symbol']}")
                 st.rerun()
 

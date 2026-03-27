@@ -67,12 +67,13 @@ def _live_dashboard():
 # ─────────────────────────────────────────────────────────────────────
 def _init_state():
     """Load paper trading state from DB into session_state."""
+    user_id = st.session_state["user_id"]
     if _BAL_KEY not in st.session_state:
         from data.database import load_paper_balance
-        st.session_state[_BAL_KEY] = load_paper_balance()
+        st.session_state[_BAL_KEY] = load_paper_balance(user_id)
     if _ORD_KEY not in st.session_state:
         from data.database import load_paper_orders
-        st.session_state[_ORD_KEY] = load_paper_orders()
+        st.session_state[_ORD_KEY] = load_paper_orders(user_id)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -243,8 +244,9 @@ def _render_order_form():
 
             # Persist
             from data.database import save_paper_order, update_paper_balance
-            save_paper_order(order)
-            update_paper_balance(new_balance)
+            user_id = st.session_state["user_id"]
+            save_paper_order(user_id, order)
+            update_paper_balance(user_id, new_balance)
 
             # Update session state
             st.session_state[_ORD_KEY].insert(0, order)  # newest first
@@ -581,7 +583,8 @@ def _render_controls():
     with c1:
         if st.button("RESET PAPER PORTFOLIO", use_container_width=True, key="m17_reset_btn"):
             from data.database import clear_paper_trading
-            clear_paper_trading()
+            user_id = st.session_state["user_id"]
+            clear_paper_trading(user_id)
             st.session_state[_BAL_KEY] = PAPER_DEFAULT_BALANCE
             st.session_state[_ORD_KEY] = []
             logger.info("m17_paper | RESET")

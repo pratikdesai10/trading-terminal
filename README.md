@@ -24,24 +24,6 @@ Bloomberg-style terminal for Indian markets (NSE/BSE) built with Python and Stre
 | M16    | Alerts          | Price and % change alerts with live monitoring                                            |
 | M17    | Paper Trading   | Virtual cash trading with order execution, position tracking, realized P&L                |
 
-## Quick Start
-
-```bash
-git clone <repo>
-cd trading-terminal
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-Open [http://localhost:8501](http://localhost:8501) in your browser.
-
-To run on a specific port:
-
-```bash
-streamlit run app.py --server.port 8502
-```
-
 ## Tech Stack
 
 - **Python 3.12+** / **Streamlit 1.55**
@@ -77,6 +59,44 @@ app.py                    Streamlit entry point, tab router
 ```
 
 Each module is a standalone file that fetches its own data through the `data/` layer and renders its UI. The data layer uses `st.cache_data` with TTL-based expiration to avoid rate limiting.
+
+## Authentication
+
+The terminal uses JWT-based authentication. Each user gets isolated data (portfolio, watchlist, alerts, paper trades).
+
+- Sign up with username, email, and password
+- Passwords are hashed with bcrypt
+- JWT tokens expire after 24 hours
+
+## Deployment (Streamlit Community Cloud)
+
+1. Push the repo to GitHub
+2. Go to [share.streamlit.io](https://share.streamlit.io) and click "New app"
+3. Connect your GitHub repo, set `app.py` as the entry point
+4. In **Advanced settings** > **Secrets**, add:
+   ```
+   JWT_SECRET = "your-secure-random-string"
+   ```
+5. Click **Deploy**
+
+## Local Development
+
+```bash
+git clone https://github.com/pratikdesai10/trading-terminal.git
+cd trading-terminal
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+```
+
+Create `.streamlit/secrets.toml`:
+```toml
+JWT_SECRET = "dev-secret"
+```
+
+Run the app:
+```bash
+streamlit run app.py
+```
 
 ## Market Hours
 
