@@ -1,5 +1,15 @@
 # Screenshots (dev artifacts)
 *.png
+screenshots/
+
+# Development tools & artifacts
+.playwright-mcp/
+.claude/
+CLAUDE.md
+indian-bloomberg-terminal-plan.md
+
+# Secrets (never commit)
+.streamlit/secrets.toml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
