@@ -88,14 +88,19 @@ def _render_add_alert():
     # Show current LTP for the selected symbol
     with c_ltp:
         from data.nse_live import get_stock_quote
+        import pytz as _pytz
+        _ist = _pytz.timezone("Asia/Kolkata")
+        _now = datetime.now(_ist)
+        _market_open = _now.weekday() < 5 and (9 * 60 + 15) <= (_now.hour * 60 + _now.minute) < (15 * 60 + 30)
         _quote = get_stock_quote(symbol)
         if _quote:
             _ltp = _quote["lastPrice"]
             _pchg = _quote["pChange"]
             _chg_color = COLORS["green"] if _pchg >= 0 else COLORS["red"]
+            _price_label = "LTP" if _market_open else "PREV CLOSE"
             st.markdown(
                 f'<div style="text-align:center;padding:4px 0">'
-                f'<div style="color:{COLORS["muted"]};font-size:9px">LTP</div>'
+                f'<div style="color:{COLORS["muted"]};font-size:9px">{_price_label}</div>'
                 f'<div style="color:{COLORS["text"]};font-size:14px;font-weight:bold">'
                 f'{format_inr(_ltp)}</div>'
                 f'<div style="color:{_chg_color};font-size:10px">{_pchg:+.2f}%</div>'
@@ -120,7 +125,7 @@ def _render_add_alert():
 
     with c_val:
         # Default value based on LTP if available
-        default_price = round(_quote["lastPrice"], 2) if _quote else 100.0
+        default_price = round(float(_quote["lastPrice"]), 2) if _quote else 100.0
         if condition in ("pct_change_above", "pct_change_below"):
             value = st.number_input(
                 "VALUE (%)",

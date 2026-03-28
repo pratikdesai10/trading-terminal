@@ -7,7 +7,7 @@ from utils.logger import logger
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def get_option_chain(symbol, expiry=None):
+def get_option_chain(symbol, expiry=None):  # expiry included in cache key
     """Fetch option chain for a symbol.
 
     Returns dict with keys: records (list of strike dicts), expiry_dates (list),

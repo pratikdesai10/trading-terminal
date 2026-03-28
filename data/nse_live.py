@@ -39,16 +39,21 @@ def get_stock_quote(symbol):
         if data and "priceInfo" in data:
             price_info = data["priceInfo"]
             info = data.get("info", {})
+            last_price = price_info.get("lastPrice", 0)
+            prev_close = price_info.get("previousClose", 0)
+            # After market hours NSE returns lastPrice=0; fall back to previousClose
+            if not last_price and prev_close:
+                last_price = prev_close
             result = {
                 "symbol": symbol,
                 "companyName": info.get("compName", symbol),
-                "lastPrice": price_info.get("lastPrice", 0),
+                "lastPrice": last_price,
                 "change": price_info.get("change", 0),
                 "pChange": price_info.get("pChange", 0),
                 "open": price_info.get("open", 0),
                 "dayHigh": price_info.get("intraDayHighLow", {}).get("max", 0),
                 "dayLow": price_info.get("intraDayHighLow", {}).get("min", 0),
-                "previousClose": price_info.get("previousClose", 0),
+                "previousClose": prev_close,
                 "totalTradedVolume": data.get("preOpenMarket", {}).get("totalTradedVolume", 0),
                 "yearHigh": price_info.get("weekHighLow", {}).get("max", 0),
                 "yearLow": price_info.get("weekHighLow", {}).get("min", 0),
@@ -67,16 +72,20 @@ def get_stock_quote(symbol):
         nse = Nse()
         q = nse.get_quote(symbol)
         if q:
+            last_price = q.get("lastPrice", 0)
+            prev_close = q.get("previousClose", 0)
+            if not last_price and prev_close:
+                last_price = prev_close
             result = {
                 "symbol": symbol,
                 "companyName": q.get("companyName", symbol),
-                "lastPrice": q.get("lastPrice", 0),
+                "lastPrice": last_price,
                 "change": q.get("change", 0),
                 "pChange": q.get("pChange", 0),
                 "open": q.get("open", 0),
                 "dayHigh": q.get("dayHigh", 0),
                 "dayLow": q.get("dayLow", 0),
-                "previousClose": q.get("previousClose", 0),
+                "previousClose": prev_close,
                 "totalTradedVolume": q.get("totalTradedVolume", 0),
                 "yearHigh": q.get("high52", 0),
                 "yearLow": q.get("low52", 0),

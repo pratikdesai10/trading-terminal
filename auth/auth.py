@@ -1,48 +1,23 @@
 """JWT-based authentication for the Indian Bloomberg Terminal."""
 
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import re
 
 import bcrypt
-import jwt
 import streamlit as st
 
-from data.database import create_user, get_user_by_username
+from data.database import (
+    create_user, get_user_by_username,
+    create_session, get_session, delete_session,
+)
 from utils.logger import logger
 
 
-def _get_secret_key():
-    """Read JWT secret from Streamlit secrets, env var, or raise."""
-    try:
-        secret = st.secrets["JWT_SECRET"]
-        if len(secret) < 32:
-            raise RuntimeError("JWT_SECRET must be at least 32 characters for security.")
-        return secret
-    except (FileNotFoundError, KeyError):
-        pass
-    val = os.environ.get("JWT_SECRET")
-    if val:
-        if len(val) < 32:
-            raise RuntimeError("JWT_SECRET must be at least 32 characters for security.")
-        return val
-    raise RuntimeError(
-        "JWT_SECRET not configured. "
-        "Set it in .streamlit/secrets.toml (local) or Streamlit Cloud secrets (production)."
-    )
-
-
-_JWT_ALGORITHM = "HS256"
-_JWT_EXPIRY_HOURS = 24
-
-# Session state keys cleared on logout
-_USER_STATE_KEYS = [
-    "auth_token", "user", "user_id",
-    "watchlist", "portfolio_holdings",
-    "paper_balance", "paper_orders",
-    "price_alerts", "screener_results",
-]
+_SESSION_EXPIRY_HOURS = 24
+_SESSION_PARAM = "s"  # short query param name
 
 
 def _hash_password(password):
@@ -55,38 +30,50 @@ def _verify_password(password, password_hash):
     return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
 
-def _create_token(user_id, username):
-    """Create a JWT token."""
-    payload = {
-        "user_id": user_id,
-        "username": username,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=_JWT_EXPIRY_HOURS),
-    }
-    return jwt.encode(payload, _get_secret_key(), algorithm=_JWT_ALGORITHM)
+def _new_session(user_id, username):
+    """Create a new server-side session. Returns the opaque session ID."""
+    session_id = secrets.token_urlsafe(12)  # ~16 chars, URL-safe
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(hours=_SESSION_EXPIRY_HOURS)
+    ).strftime("%Y-%m-%d %H:%M:%S")
+    create_session(session_id, user_id, username, expires_at)
+    return session_id
 
 
-def verify_token(token):
-    """Decode and verify a JWT token. Returns payload dict or None."""
-    try:
-        return jwt.decode(token, _get_secret_key(), algorithms=[_JWT_ALGORITHM])
-    except jwt.ExpiredSignatureError:
-        logger.info("auth | token expired")
-        return None
-    except jwt.InvalidTokenError as e:
-        logger.warning(f"auth | invalid token: {e}")
-        return None
+# Session state keys cleared on logout
+_USER_STATE_KEYS = [
+    "session_id", "user", "user_id",
+    "watchlist", "portfolio_holdings",
+    "paper_balance", "paper_orders",
+    "price_alerts", "screener_results",
+]
 
 
 def require_auth():
-    """Gate function — renders login page if not authenticated. Returns user dict."""
-    token = st.session_state.get("auth_token")
-    if token:
-        payload = verify_token(token)
-        if payload:
-            return {"user_id": payload["user_id"], "username": payload["username"]}
-        # Token expired/invalid — clear and re-auth
+    """Gate function — renders login page if not authenticated. Returns user dict.
+
+    Session persistence across refreshes:
+    - On login/signup: short opaque session_id written to st.query_params["s"]
+    - On F5 refresh: Streamlit reloads the URL (?s=<id>), session_id looked up
+      in DB to restore the user — no JWT or credentials in the URL.
+    """
+    # 1. Try session_state first (already validated this run)
+    sid = st.session_state.get("session_id")
+
+    # 2. On refresh session_state is empty — restore from query param
+    if not sid:
+        sid = st.query_params.get(_SESSION_PARAM)
+        if sid:
+            st.session_state["session_id"] = sid
+
+    if sid:
+        user = get_session(sid)
+        if user:
+            return user
+        # Session expired or not found — clear everything
         for key in _USER_STATE_KEYS:
             st.session_state.pop(key, None)
+        st.query_params.clear()
 
     _render_auth_page()
     st.stop()
@@ -94,9 +81,21 @@ def require_auth():
 
 def logout():
     """Clear auth state and rerun."""
+    sid = st.session_state.get("session_id")
+    if sid:
+        delete_session(sid)
     for key in _USER_STATE_KEYS:
         st.session_state.pop(key, None)
+    st.query_params.clear()
     st.rerun()
+
+
+def _start_session(user_id, username):
+    """Create session, update state and query params. Call after successful auth."""
+    sid = _new_session(user_id, username)
+    st.session_state["session_id"] = sid
+    st.session_state["user"] = {"user_id": user_id, "username": username}
+    st.query_params[_SESSION_PARAM] = sid
 
 
 def _render_auth_page():
@@ -160,9 +159,7 @@ def _render_login_form():
             return
         user = get_user_by_username(username)
         if user and _verify_password(password, user["password_hash"]):
-            token = _create_token(user["id"], user["username"])
-            st.session_state["auth_token"] = token
-            st.session_state["user"] = {"user_id": user["id"], "username": user["username"]}
+            _start_session(user["id"], user["username"])
             logger.info(f"auth | login success | user={username!r}")
             st.rerun()
         else:
@@ -202,8 +199,6 @@ def _render_signup_form():
             st.error("Username or email already taken.")
             return
 
-        token = _create_token(user["id"], user["username"])
-        st.session_state["auth_token"] = token
-        st.session_state["user"] = {"user_id": user["id"], "username": user["username"]}
+        _start_session(user["id"], user["username"])
         logger.info(f"auth | signup success | user={username!r}")
         st.rerun()

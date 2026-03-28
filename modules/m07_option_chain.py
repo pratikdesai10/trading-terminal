@@ -34,12 +34,15 @@ def render():
         selected_expiry = st.selectbox("EXPIRY", expiry_dates,
                                         index=0 if expiry_dates else 0)
 
-    # Re-fetch if expiry changed
+    # Re-fetch for selected expiry (always fetch with explicit expiry to use correct cache key)
     if selected_expiry != chain.get("selected_expiry"):
         with st.spinner("Refreshing..."):
             chain = get_option_chain(symbol, expiry=selected_expiry)
         if not chain or not chain["records"]:
-            st.warning("No data for selected expiry")
+            st.warning(
+                f"No OI data for {selected_expiry}. "
+                "NSE may not have published OI for this expiry yet — try the nearest expiry."
+            )
             return
 
     records = chain["records"]

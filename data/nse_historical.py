@@ -90,6 +90,10 @@ def _fetch_yfinance(symbol, start_date, end_date):
         ticker = yf.Ticker(f"{symbol}.NS")
         df = ticker.history(start=str(start_date), end=str(end_date))
         if df is not None and not df.empty:
+            # yfinance may return MultiIndex columns for single-ticker downloads
+            # (e.g. ("Close", "ABB.NS")) — flatten to simple column names
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [col[0] for col in df.columns]
             df = df.reset_index()
             if "Date" in df.columns:
                 df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)

@@ -163,6 +163,10 @@ def _render_order_form():
 
     # Fetch current LTP
     from data.nse_live import get_stock_quote
+    import pytz as _pytz
+    _ist = _pytz.timezone("Asia/Kolkata")
+    _now = datetime.now(_ist)
+    _market_open = _now.weekday() < 5 and (9 * 60 + 15) <= (_now.hour * 60 + _now.minute) < (15 * 60 + 30)
     quote = get_stock_quote(symbol)
     ltp = quote["lastPrice"] if quote else 0
 
@@ -170,9 +174,10 @@ def _render_order_form():
         if quote:
             pchg = quote["pChange"]
             chg_color = COLORS["green"] if pchg >= 0 else COLORS["red"]
+            price_label = "LTP" if _market_open else "PREV CLOSE"
             st.markdown(
                 f'<div style="text-align:center;padding:4px 0">'
-                f'<div style="color:{COLORS["muted"]};font-size:9px">LTP</div>'
+                f'<div style="color:{COLORS["muted"]};font-size:9px">{price_label}</div>'
                 f'<div style="color:{COLORS["text"]};font-size:14px;font-weight:bold">'
                 f'{format_inr(ltp)}</div>'
                 f'<div style="color:{chg_color};font-size:10px">{pchg:+.2f}%</div>'

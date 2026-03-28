@@ -23,5 +23,4 @@ requests==2.32.3
 pytz==2024.2
 
 # Authentication
-PyJWT==2.9.0
 bcrypt==4.2.0

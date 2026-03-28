@@ -105,11 +105,35 @@ selected_tab = st.radio(
     key="active_tab",
 )
 
+# Detect tab switch
+_prev_tab_key = "_prev_active_tab"
+_tab_switched = st.session_state.get(_prev_tab_key) != selected_tab
+st.session_state[_prev_tab_key] = selected_tab
+
+# Single container that owns ALL module output.
+# On tab switch: immediately replace its entire contents with a loading screen,
+# wiping the previous module's widgets before the new one starts rendering.
+_module_area = st.empty()
+
+if _tab_switched:
+    with _module_area.container():
+        st.markdown(
+            f'<div style="text-align:center;padding:80px 0;font-family:monospace">'
+            f'<div style="color:#FF9900;font-size:13px;letter-spacing:2px">LOADING {selected_tab}...</div>'
+            f'<div style="color:#444444;font-size:11px;margin-top:8px">Please wait</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
 # Only import and render the selected module
 try:
     mod = importlib.import_module(TAB_MODULES[selected_tab])
-    mod.render()
+    _module_area.empty()
+    with _module_area.container():
+        mod.render()
 except Exception as e:
     logger.error(f"MODULE CRASH | {selected_tab} | {type(e).__name__}: {e}")
-    st.error(f"**{selected_tab}** failed to load: {type(e).__name__}: {e}")
-    st.info("Try switching to another module or refreshing the page.")
+    _module_area.empty()
+    with _module_area.container():
+        st.error(f"**{selected_tab}** failed to load: {type(e).__name__}: {e}")
+        st.info("Try switching to another module or refreshing the page.")

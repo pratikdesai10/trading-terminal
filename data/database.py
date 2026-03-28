@@ -69,6 +69,13 @@ CREATE TABLE IF NOT EXISTS paper_orders (
     timestamp   TEXT NOT NULL,
     status      TEXT DEFAULT 'FILLED'
 );
+
+CREATE TABLE IF NOT EXISTS sessions (
+    session_id  TEXT PRIMARY KEY,
+    user_id     INTEGER NOT NULL,
+    username    TEXT NOT NULL,
+    expires_at  TEXT NOT NULL
+);
 """
 
 PAPER_DEFAULT_BALANCE = 1_000_000.0
@@ -464,3 +471,48 @@ def clear_paper_trading(user_id):
             conn.commit()
     except sqlite3.Error as e:
         logger.error(f"database | clear_paper_trading failed: {e}")
+
+
+# ═════════════════════════════════════════════════════════════════════
+# SESSIONS
+# ═════════════════════════════════════════════════════════════════════
+
+def create_session(session_id, user_id, username, expires_at):
+    """Insert a new session row."""
+    try:
+        with _db() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO sessions (session_id, user_id, username, expires_at) "
+                "VALUES (?, ?, ?, ?)",
+                (session_id, user_id, username, expires_at),
+            )
+            conn.commit()
+    except sqlite3.Error as e:
+        logger.error(f"database | create_session failed: {e}")
+
+
+def get_session(session_id):
+    """Look up a session by ID. Returns dict or None if not found/expired."""
+    try:
+        with _db() as conn:
+            row = conn.execute(
+                "SELECT user_id, username, expires_at FROM sessions "
+                "WHERE session_id = ? AND expires_at > datetime('now')",
+                (session_id,),
+            ).fetchone()
+            if row:
+                return {"user_id": row["user_id"], "username": row["username"]}
+            return None
+    except sqlite3.Error as e:
+        logger.error(f"database | get_session failed: {e}")
+        return None
+
+
+def delete_session(session_id):
+    """Remove a session (logout)."""
+    try:
+        with _db() as conn:
+            conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+            conn.commit()
+    except sqlite3.Error as e:
+        logger.error(f"database | delete_session failed: {e}")
