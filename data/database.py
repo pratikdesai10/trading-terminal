@@ -214,6 +214,25 @@ def remove_holding(user_id, row_id):
         logger.error(f"database | remove_holding failed: {e}")
 
 
+def update_holding_qty(user_id, row_id, new_qty):
+    """Update qty for a holding. If new_qty <= 0, removes it."""
+    try:
+        with _db() as conn:
+            if new_qty <= 0:
+                conn.execute(
+                    "DELETE FROM portfolio_holdings WHERE id = ? AND user_id = ?",
+                    (row_id, user_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE portfolio_holdings SET qty = ? WHERE id = ? AND user_id = ?",
+                    (new_qty, row_id, user_id),
+                )
+            conn.commit()
+    except sqlite3.Error as e:
+        logger.error(f"database | update_holding_qty failed: {e}")
+
+
 def replace_all_holdings(user_id, holdings):
     """Replace all holdings for a user (for JSON import). Runs in a transaction."""
     try:

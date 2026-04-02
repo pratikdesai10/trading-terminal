@@ -174,32 +174,47 @@ def _render_controls():
                     use_container_width=True,
                 )
 
-    # ── Remove holding ──
+    # ── Reduce / Remove holding ──
     holdings = st.session_state[_STATE_KEY]
     if holdings:
         st.markdown(
             f'<p style="color:{COLORS["amber"]};font-size:12px;margin-bottom:2px;'
-            f'margin-top:8px">REMOVE HOLDING</p>',
+            f'margin-top:8px">REDUCE / REMOVE HOLDING</p>',
             unsafe_allow_html=True,
         )
-        labels = [
-            f"{h['symbol']}  |  Qty: {h['qty']}  |  Avg: {format_inr(h['avg_price'])}  |  {h['buy_date']}"
-            for h in holdings
-        ]
-        rm_c1, rm_c2 = st.columns([4, 1])
+        rm_c1, rm_c2, rm_c3 = st.columns([3, 1, 1])
         with rm_c1:
             rm_idx = st.selectbox(
-                "SELECT HOLDING", range(len(labels)),
-                format_func=lambda i: labels[i],
+                "SELECT HOLDING", range(len(holdings)),
+                format_func=lambda i: holdings[i]["symbol"],
                 label_visibility="collapsed",
             )
+        selected = holdings[rm_idx]
         with rm_c2:
+            reduce_qty = st.number_input(
+                "QTY", min_value=1, max_value=int(selected["qty"]),
+                value=int(selected["qty"]), step=1,
+                label_visibility="collapsed",
+                key="rm_qty",
+            )
+        with rm_c3:
             if st.button("REMOVE", use_container_width=True):
-                removed = holdings.pop(rm_idx)
-                if "_db_id" in removed:
-                    from data.database import remove_holding
-                    remove_holding(user_id, removed["_db_id"])
-                logger.info(f"m10_portfolio | REMOVE | {removed['symbol']}")
+                new_qty = int(selected["qty"]) - int(reduce_qty)
+                if "_db_id" in selected:
+                    from data.database import update_holding_qty, remove_holding
+                    if new_qty <= 0:
+                        remove_holding(user_id, selected["_db_id"])
+                        holdings.pop(rm_idx)
+                        logger.info(f"m10_portfolio | REMOVE | {selected['symbol']}")
+                    else:
+                        update_holding_qty(user_id, selected["_db_id"], new_qty)
+                        holdings[rm_idx]["qty"] = new_qty
+                        logger.info(f"m10_portfolio | REDUCE | {selected['symbol']} qty={new_qty}")
+                else:
+                    if new_qty <= 0:
+                        holdings.pop(rm_idx)
+                    else:
+                        holdings[rm_idx]["qty"] = new_qty
                 st.rerun()
 
 

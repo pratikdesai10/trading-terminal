@@ -131,7 +131,7 @@ def _render_auth_page():
         </style>
         <div style="text-align:center;margin-top:40px">
             <div class="auth-title">INDIAN BLOOMBERG TERMINAL</div>
-            <div class="auth-subtitle">SECURE ACCESS</div>
+            <div class="auth-subtitle">DEVELOPED BY PRATIK DESAI</div>
         </div>
         """,
         unsafe_allow_html=True,
