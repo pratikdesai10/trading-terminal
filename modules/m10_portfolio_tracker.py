@@ -76,103 +76,138 @@ def _render_controls():
     """Render add-holding form and import/export buttons."""
     user_id = st.session_state["user_id"]
 
-    col_add, col_io = st.columns([3, 1])
-
-    with col_add:
+    # ── Header row: labels ──
+    lbl_add, _, _, _, _, lbl_import, lbl_export = st.columns([2, 1, 1, 1, 1, 1, 1])
+    with lbl_add:
         st.markdown(
             f'<p style="color:{COLORS["amber"]};font-size:12px;margin-bottom:2px">'
             f'ADD HOLDING</p>',
             unsafe_allow_html=True,
         )
-        c_sym, c_qty, c_price, c_date, c_btn = st.columns([2, 1, 1, 1, 1])
-
-        with c_sym:
-            symbol = st.selectbox(
-                "SYMBOL", NIFTY_500_SYMBOLS, index=0,
-                label_visibility="collapsed",
-            )
-        with c_qty:
-            qty = st.number_input(
-                "QTY", min_value=1, value=1, step=1,
-                label_visibility="collapsed",
-            )
-        with c_price:
-            avg_price = st.number_input(
-                "AVG PRICE (₹)", min_value=0.01, value=100.0,
-                step=0.5, format="%.2f",
-                label_visibility="collapsed",
-            )
-        with c_date:
-            buy_date = st.date_input(
-                "BUY DATE", value=date.today(),
-                label_visibility="collapsed",
-            )
-        with c_btn:
-            if st.button("ADD", use_container_width=True):
-                new_holding = {
-                    "symbol": symbol,
-                    "qty": int(qty),
-                    "avg_price": float(avg_price),
-                    "buy_date": buy_date.isoformat(),
-                }
-                from data.database import save_holding
-                new_holding["_db_id"] = save_holding(user_id, new_holding)
-                st.session_state[_STATE_KEY].append(new_holding)
-                logger.info(
-                    f"m10_portfolio | ADD | {symbol} qty={qty} "
-                    f"avg={avg_price} date={buy_date}"
-                )
-                st.rerun()
-
-    with col_io:
+    with lbl_import:
         st.markdown(
-            f'<p style="color:{COLORS["amber"]};font-size:12px;margin-bottom:2px">'
-            f'IMPORT / EXPORT</p>',
+            f'<p style="color:{COLORS["amber"]};font-size:12px;margin-bottom:2px;text-align:center">'
+            f'IMPORT</p>',
             unsafe_allow_html=True,
         )
-        io_c1, io_c2 = st.columns(2)
-        with io_c1:
-            uploaded = st.file_uploader(
-                "LOAD JSON", type=["json"], label_visibility="collapsed",
-            )
-            if uploaded is not None:
-                try:
-                    data = json.loads(uploaded.read())
-                    if not isinstance(data, list):
-                        st.error("JSON must be a list of holdings")
-                    else:
-                        required = {"symbol", "qty", "avg_price", "buy_date"}
-                        invalid = [
-                            i for i, h in enumerate(data)
-                            if not isinstance(h, dict) or not required.issubset(h)
-                        ]
-                        if invalid:
-                            st.error(f"Invalid holdings at indices: {invalid[:5]}. Each must have: {', '.join(sorted(required))}")
-                        else:
-                            from data.database import replace_all_holdings
-                            replace_all_holdings(user_id, data)
-                            from data.database import load_holdings
-                            st.session_state[_STATE_KEY] = load_holdings(user_id)
-                            logger.info(
-                                f"m10_portfolio | IMPORT | {len(data)} holdings loaded"
-                            )
-                            st.rerun()
-                except (json.JSONDecodeError, Exception) as e:
-                    st.error(f"Import failed: {e}")
+    with lbl_export:
+        st.markdown(
+            f'<p style="color:{COLORS["amber"]};font-size:12px;margin-bottom:2px;text-align:center">'
+            f'EXPORT</p>',
+            unsafe_allow_html=True,
+        )
 
-        with io_c2:
-            if st.session_state[_STATE_KEY]:
-                export_data = [
-                    {k: v for k, v in h.items() if k != "_db_id"}
-                    for h in st.session_state[_STATE_KEY]
-                ]
-                portfolio_json = json.dumps(export_data, indent=2)
-                st.download_button(
-                    "SAVE", portfolio_json,
-                    file_name="portfolio.json",
-                    mime="application/json",
-                    use_container_width=True,
-                )
+    # ── Form row: all controls on one line ──
+    st.markdown("""
+<style>
+[data-testid="stFileUploader"] {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+[data-testid="stFileUploader"] > section {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+[data-testid="stFileUploaderDropzone"],
+[data-testid="stFileUploadDropzone"] {
+    all: unset !important;
+    display: block !important;
+}
+[data-testid="stFileUploaderDropzone"] > div,
+[data-testid="stFileUploadDropzone"] > div {
+    display: none !important;
+}
+[data-testid="stFileUploaderDropzone"] button,
+[data-testid="stFileUploadDropzone"] button {
+    width: 100% !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+    c_sym, c_qty, c_price, c_date, c_add, c_browse, c_save = st.columns(
+        [2, 1, 1, 1, 1, 1, 1]
+    )
+
+    with c_sym:
+        symbol = st.selectbox(
+            "SYMBOL", NIFTY_500_SYMBOLS, index=0,
+            label_visibility="collapsed",
+        )
+    with c_qty:
+        qty = st.number_input(
+            "QTY", min_value=1, value=1, step=1,
+            label_visibility="collapsed",
+        )
+    with c_price:
+        avg_price = st.number_input(
+            "AVG PRICE (₹)", min_value=0.01, value=100.0,
+            step=0.5, format="%.2f",
+            label_visibility="collapsed",
+        )
+    with c_date:
+        buy_date = st.date_input(
+            "BUY DATE", value=date.today(),
+            label_visibility="collapsed",
+        )
+    with c_add:
+        if st.button("ADD", use_container_width=True):
+            new_holding = {
+                "symbol": symbol,
+                "qty": int(qty),
+                "avg_price": float(avg_price),
+                "buy_date": buy_date.isoformat(),
+            }
+            from data.database import save_holding
+            new_holding["_db_id"] = save_holding(user_id, new_holding)
+            st.session_state[_STATE_KEY].append(new_holding)
+            logger.info(
+                f"m10_portfolio | ADD | {symbol} qty={qty} "
+                f"avg={avg_price} date={buy_date}"
+            )
+            st.rerun()
+
+    with c_browse:
+        uploaded = st.file_uploader(
+            "LOAD JSON", type=["json"], label_visibility="collapsed",
+        )
+        if uploaded is not None:
+            try:
+                data = json.loads(uploaded.read())
+                if not isinstance(data, list):
+                    st.error("JSON must be a list of holdings")
+                else:
+                    required = {"symbol", "qty", "avg_price", "buy_date"}
+                    invalid = [
+                        i for i, h in enumerate(data)
+                        if not isinstance(h, dict) or not required.issubset(h)
+                    ]
+                    if invalid:
+                        st.error(f"Invalid holdings at indices: {invalid[:5]}. Each must have: {', '.join(sorted(required))}")
+                    else:
+                        from data.database import replace_all_holdings
+                        replace_all_holdings(user_id, data)
+                        from data.database import load_holdings
+                        st.session_state[_STATE_KEY] = load_holdings(user_id)
+                        logger.info(
+                            f"m10_portfolio | IMPORT | {len(data)} holdings loaded"
+                        )
+                        st.rerun()
+            except (json.JSONDecodeError, Exception) as e:
+                st.error(f"Import failed: {e}")
+
+    with c_save:
+        if st.session_state[_STATE_KEY]:
+            export_data = [
+                {k: v for k, v in h.items() if k != "_db_id"}
+                for h in st.session_state[_STATE_KEY]
+            ]
+            portfolio_json = json.dumps(export_data, indent=2)
+            st.download_button(
+                "SAVE", portfolio_json,
+                file_name="portfolio.json",
+                mime="application/json",
+                use_container_width=True,
+            )
 
     # ── Reduce / Remove holding ──
     holdings = st.session_state[_STATE_KEY]
@@ -358,7 +393,8 @@ def _metric_card(col, label, value, value_color):
         f'<div style="text-align:center;padding:6px;border:1px solid {COLORS["border"]};'
         f'border-radius:2px;background:{COLORS["panel"]}">'
         f'<div style="color:{COLORS["muted"]};font-size:10px;font-family:monospace">{label}</div>'
-        f'<div style="color:{value_color};font-size:16px;font-weight:bold;font-family:monospace">'
+        f'<div style="color:{value_color};font-size:14px;font-weight:bold;font-family:monospace;'
+        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
         f'{value}</div></div>',
         unsafe_allow_html=True,
     )
@@ -483,7 +519,9 @@ def _render_allocation_pie(holdings, live_data):
         labels=labels,
         values=values,
         hole=0.45,
-        textinfo="label+percent",
+        textinfo="percent",
+        textposition="inside",
+        insidetextorientation="radial",
         textfont=dict(size=10, family="monospace"),
         marker=dict(
             colors=[
@@ -500,8 +538,15 @@ def _render_allocation_pie(holdings, live_data):
 
     fig.update_layout(**plotly_layout(
         height=350,
-        showlegend=False,
-        margin=dict(l=10, r=10, t=10, b=10),
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            x=1.02, y=0.5,
+            xanchor="left", yanchor="middle",
+            font=dict(size=10, family="monospace", color=COLORS["text"]),
+            bgcolor="rgba(0,0,0,0)",
+        ),
+        margin=dict(l=10, r=120, t=10, b=10),
     ))
     st.plotly_chart(fig, use_container_width=True)
 
@@ -531,7 +576,9 @@ def _render_sector_pie(holdings, live_data):
         labels=labels,
         values=values,
         hole=0.45,
-        textinfo="label+percent",
+        textinfo="percent",
+        textposition="inside",
+        insidetextorientation="radial",
         textfont=dict(size=10, family="monospace"),
         marker=dict(
             colors=colors,
@@ -543,8 +590,15 @@ def _render_sector_pie(holdings, live_data):
 
     fig.update_layout(**plotly_layout(
         height=350,
-        showlegend=False,
-        margin=dict(l=10, r=10, t=10, b=10),
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            x=1.02, y=0.5,
+            xanchor="left", yanchor="middle",
+            font=dict(size=10, family="monospace", color=COLORS["text"]),
+            bgcolor="rgba(0,0,0,0)",
+        ),
+        margin=dict(l=10, r=120, t=10, b=10),
     ))
     st.plotly_chart(fig, use_container_width=True)
 

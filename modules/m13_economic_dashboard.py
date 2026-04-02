@@ -115,7 +115,7 @@ def _render_usdinr_chart():
     ))
     fig.update_layout(**plotly_layout(
         height=350,
-        title=None,
+        title="",
         yaxis_title="INR per USD",
         xaxis=dict(gridcolor="#1A1A1A", zerolinecolor="#333333"),
         yaxis=dict(gridcolor="#1A1A1A", zerolinecolor="#333333"),

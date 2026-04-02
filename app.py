@@ -87,7 +87,7 @@ TAB_CONFIG = [
     ("M10 PORTFOLIO",  "modules.m10_portfolio_tracker"),
     ("M11 BACKTEST",   "modules.m11_backtesting"),
     ("M12 OPTIMIZER",  "modules.m12_portfolio_optimizer"),
-    ("M13 ECONOMIC",   "modules.m13_economic_dashboard"),
+    ("M13 ECONOMICS",  "modules.m13_economic_dashboard"),
     ("M14 FII/DII",    "modules.m14_fii_dii_tracker"),
     ("M15 NEWS",       "modules.m15_news_sentiment"),
     ("M16 ALERTS",     "modules.m16_alerts"),

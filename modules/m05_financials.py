@@ -39,11 +39,15 @@ def render():
     """Render the Financials module."""
     st.markdown("### FINANCIAL ANALYSIS")
 
+    st.markdown(
+        f'<p style="color:{COLORS["amber"]};font-size:12px;margin-bottom:2px">SYMBOL</p>',
+        unsafe_allow_html=True,
+    )
     col_sym, col_period = st.columns([2, 1])
     with col_sym:
-        symbol = st.selectbox("SYMBOL", NIFTY_500_SYMBOLS, index=0, key="m05_symbol")
+        symbol = st.selectbox("SYMBOL", NIFTY_500_SYMBOLS, index=0, key="m05_symbol", label_visibility="collapsed")
     with col_period:
-        period = st.radio("PERIOD", ["Annual", "Quarterly"], horizontal=True, key="m05_period")
+        period = st.radio("PERIOD", ["Annual", "Quarterly"], horizontal=True, key="m05_period", label_visibility="collapsed")
 
     period_key = "annual" if period == "Annual" else "quarterly"
 
