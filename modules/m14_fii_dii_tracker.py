@@ -2,8 +2,12 @@
 
 import plotly.graph_objects as go
 import pandas as pd
-import requests
 import streamlit as st
+
+try:
+    from curl_cffi import requests
+except Exception:
+    import requests
 
 from config import COLORS, plotly_layout
 from utils.logger import logger
@@ -43,13 +47,17 @@ def _fetch_fii_dii_data():
     logger.info("m14_fii_dii | fetching from NSE API")
 
     try:
-        s = requests.Session()
-        s.headers.update({
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "application/json",
-            "Accept-Language": "en-US,en;q=0.9",
-        })
+        try:
+            from curl_cffi import requests as _curl_req
+            s = _curl_req.Session(impersonate="chrome")
+        except Exception:
+            s = requests.Session()
+            s.headers.update({
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                              "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+                "Accept-Language": "en-US,en;q=0.9",
+            })
         # Hit main page first to get cookies
         s.get("https://www.nseindia.com", timeout=10)
 

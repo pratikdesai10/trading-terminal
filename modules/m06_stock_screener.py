@@ -230,17 +230,21 @@ def _fetch_screener_data(universe="Nifty 50", selected_sectors_tuple=None):
     # ── Compute RSI (14) from recent price data (batch download) ──
     df["RSI"] = 0.0
     try:
-        import requests as _req
         import yfinance as yf
         from datetime import datetime, timedelta
         from ta.momentum import RSIIndicator
 
-        _session = _req.Session()
-        _session.headers["User-Agent"] = (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
-        )
+        try:
+            from curl_cffi import requests as _curl_req
+            _session = _curl_req.Session(impersonate="chrome")
+        except Exception:
+            import requests as _req
+            _session = _req.Session()
+            _session.headers["User-Agent"] = (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            )
 
         end = datetime.now()
         start = end - timedelta(days=40)  # ~30 trading days

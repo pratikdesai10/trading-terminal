@@ -1,17 +1,21 @@
 """Stock screener engine — filter Nifty 50 stocks by fundamentals."""
 
 import pandas as pd
-import requests as _requests
 import yfinance as _yf
 
 from utils.logger import logger
 
-_SESSION = _requests.Session()
-_SESSION.headers["User-Agent"] = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
-)
+try:
+    from curl_cffi import requests as _curl_requests
+    _SESSION = _curl_requests.Session(impersonate="chrome")
+except Exception:
+    import requests as _requests
+    _SESSION = _requests.Session()
+    _SESSION.headers["User-Agent"] = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    )
 
 
 def run_screener(stocks_data, filters):
