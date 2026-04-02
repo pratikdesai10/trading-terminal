@@ -6,8 +6,9 @@ numpy==2.2.3
 scipy==1.14.1
 
 # Indian Market Data (all scrape NSE/RBI — no API key needed)
-jugaad-data==0.31.1
+jugaad-data==0.33.1
 nsetools==2.0.1
+nsepython==2.97
 
 # Global/Fundamental Data
 yfinance==0.2.54
