@@ -1,8 +1,17 @@
 """Stock screener engine — filter Nifty 50 stocks by fundamentals."""
 
 import pandas as pd
+import requests as _requests
+import yfinance as _yf
 
 from utils.logger import logger
+
+_SESSION = _requests.Session()
+_SESSION.headers["User-Agent"] = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 def run_screener(stocks_data, filters):
@@ -42,10 +51,9 @@ def fetch_screener_data(symbols, sectors):
     Returns list of dicts with key metrics.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    import yfinance as yf
 
     def _fetch_single(symbol):
-        ticker = yf.Ticker(f"{symbol}.NS")
+        ticker = _yf.Ticker(f"{symbol}.NS", session=_SESSION)
         info = ticker.info or {}
         if not info.get("currentPrice") and not info.get("regularMarketPrice"):
             return None

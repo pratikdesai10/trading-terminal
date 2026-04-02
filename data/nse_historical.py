@@ -3,9 +3,18 @@
 from datetime import date, timedelta
 
 import pandas as pd
+import requests as _requests
 import streamlit as st
+import yfinance as _yf
 
 from utils.logger import logger
+
+_SESSION = _requests.Session()
+_SESSION.headers["User-Agent"] = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -86,8 +95,7 @@ def _fetch_jugaad(symbol, start_date, end_date):
 def _fetch_yfinance(symbol, start_date, end_date):
     """Fetch from yfinance as fallback."""
     try:
-        import yfinance as yf
-        ticker = yf.Ticker(f"{symbol}.NS")
+        ticker = _yf.Ticker(f"{symbol}.NS", session=_SESSION)
         df = ticker.history(start=str(start_date), end=str(end_date))
         if df is not None and not df.empty:
             # yfinance may return MultiIndex columns for single-ticker downloads
@@ -177,8 +185,7 @@ def get_index_history(index_name, start_date=None, end_date=None):
     yf_symbol = yf_map.get(index_name)
     if yf_symbol:
         try:
-            import yfinance as yf
-            ticker = yf.Ticker(yf_symbol)
+            ticker = _yf.Ticker(yf_symbol, session=_SESSION)
             df = ticker.history(start=str(start_date), end=str(end_date))
             if df is not None and not df.empty:
                 df = df.reset_index()

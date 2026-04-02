@@ -137,8 +137,15 @@ def _render_key_stats(info):
 def _render_shareholding(symbol):
     """Display shareholding pattern with breakdown and stacked bar chart."""
     try:
+        import requests as _req
         import yfinance as yf
-        ticker = yf.Ticker(f"{symbol}.NS")
+        _session = _req.Session()
+        _session.headers["User-Agent"] = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
+        ticker = yf.Ticker(f"{symbol}.NS", session=_session)
         major = ticker.major_holders
         if major is None or major.empty:
             st.info("Shareholding data not available")

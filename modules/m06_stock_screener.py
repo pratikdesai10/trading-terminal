@@ -230,9 +230,17 @@ def _fetch_screener_data(universe="Nifty 50", selected_sectors_tuple=None):
     # ── Compute RSI (14) from recent price data (batch download) ──
     df["RSI"] = 0.0
     try:
+        import requests as _req
         import yfinance as yf
         from datetime import datetime, timedelta
         from ta.momentum import RSIIndicator
+
+        _session = _req.Session()
+        _session.headers["User-Agent"] = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
 
         end = datetime.now()
         start = end - timedelta(days=40)  # ~30 trading days
@@ -245,6 +253,7 @@ def _fetch_screener_data(universe="Nifty 50", selected_sectors_tuple=None):
                 end=end.strftime("%Y-%m-%d"),
                 progress=False,
                 threads=True,
+                session=_session,
             )
             if batch is not None and not batch.empty:
                 close_data = batch["Close"] if "Close" in batch.columns else batch.get("Adj Close")

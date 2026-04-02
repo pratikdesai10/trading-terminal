@@ -1,9 +1,18 @@
 """Data layer for economic indicators — RBI rates, forex, commodities, yields."""
 
 import pandas as pd
+import requests as _requests
 import streamlit as st
+import yfinance as _yf
 
 from utils.logger import logger
+
+_SESSION = _requests.Session()
+_SESSION.headers["User-Agent"] = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 # ── RBI Key Rates (hardcoded — APIs unreliable) ──
@@ -86,17 +95,14 @@ def get_forex_data(pair="USDINR=X", period="1y"):
     """
     logger.info(f"get_forex_data | pair={pair} period={period}")
     try:
-        import yfinance as yf
-
-        df = yf.download(pair, period=period, progress=False)
+        df = _yf.Ticker(pair, session=_SESSION).history(period=period)
         if df is None or df.empty:
             logger.warning(f"get_forex_data | pair={pair} | empty response")
             return pd.DataFrame()
 
         df = df.reset_index()
-        # Flatten MultiIndex columns if present
         if isinstance(df.columns, pd.MultiIndex):
-            df.columns = [col[0] if col[1] == "" or col[1] == pair else col[0] for col in df.columns]
+            df.columns = [col[0] for col in df.columns]
 
         logger.info(f"get_forex_data | pair={pair} | OK | rows={len(df)}")
         return df
@@ -118,16 +124,14 @@ def get_commodity_data(symbol="BZ=F", period="1y"):
     """
     logger.info(f"get_commodity_data | symbol={symbol} period={period}")
     try:
-        import yfinance as yf
-
-        df = yf.download(symbol, period=period, progress=False)
+        df = _yf.Ticker(symbol, session=_SESSION).history(period=period)
         if df is None or df.empty:
             logger.warning(f"get_commodity_data | symbol={symbol} | empty response")
             return pd.DataFrame()
 
         df = df.reset_index()
         if isinstance(df.columns, pd.MultiIndex):
-            df.columns = [col[0] if col[1] == "" or col[1] == symbol else col[0] for col in df.columns]
+            df.columns = [col[0] for col in df.columns]
 
         logger.info(f"get_commodity_data | symbol={symbol} | OK | rows={len(df)}")
         return df
@@ -149,16 +153,14 @@ def get_treasury_yield(symbol="^TNX", period="1y"):
     """
     logger.info(f"get_treasury_yield | symbol={symbol} period={period}")
     try:
-        import yfinance as yf
-
-        df = yf.download(symbol, period=period, progress=False)
+        df = _yf.Ticker(symbol, session=_SESSION).history(period=period)
         if df is None or df.empty:
             logger.warning(f"get_treasury_yield | symbol={symbol} | empty response")
             return pd.DataFrame()
 
         df = df.reset_index()
         if isinstance(df.columns, pd.MultiIndex):
-            df.columns = [col[0] if col[1] == "" or col[1] == symbol else col[0] for col in df.columns]
+            df.columns = [col[0] for col in df.columns]
 
         logger.info(f"get_treasury_yield | symbol={symbol} | OK | rows={len(df)}")
         return df
@@ -175,9 +177,7 @@ def get_current_quote(symbol):
     """
     logger.info(f"get_current_quote | symbol={symbol}")
     try:
-        import yfinance as yf
-
-        ticker = yf.Ticker(symbol)
+        ticker = _yf.Ticker(symbol, session=_SESSION)
         info = ticker.info
         if not info or not isinstance(info, dict):
             logger.warning(f"get_current_quote | symbol={symbol} | no info")

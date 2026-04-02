@@ -1,8 +1,17 @@
 """yfinance wrapper for Indian stock fundamentals."""
 
+import requests as _requests
 import streamlit as st
+import yfinance as _yf
 
 from utils.logger import logger
+
+_SESSION = _requests.Session()
+_SESSION.headers["User-Agent"] = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -14,8 +23,7 @@ def get_company_info(symbol):
     """
     logger.info(f"get_company_info | symbol={symbol}")
     try:
-        import yfinance as yf
-        ticker = yf.Ticker(f"{symbol}.NS")
+        ticker = _yf.Ticker(f"{symbol}.NS", session=_SESSION)
         info = ticker.info
         if not info or not isinstance(info, dict) or len(info) < 5:
             logger.warning(f"get_company_info | symbol={symbol} | empty or minimal response, keys={len(info) if info else 0}")
@@ -35,8 +43,7 @@ def get_income_statement(symbol):
     """
     logger.info(f"get_income_statement | symbol={symbol}")
     try:
-        import yfinance as yf
-        ticker = yf.Ticker(f"{symbol}.NS")
+        ticker = _yf.Ticker(f"{symbol}.NS", session=_SESSION)
         annual = ticker.financials
         quarterly = ticker.quarterly_financials
         if annual is None or annual.empty:
@@ -61,8 +68,7 @@ def get_balance_sheet(symbol):
     """
     logger.info(f"get_balance_sheet | symbol={symbol}")
     try:
-        import yfinance as yf
-        ticker = yf.Ticker(f"{symbol}.NS")
+        ticker = _yf.Ticker(f"{symbol}.NS", session=_SESSION)
         annual = ticker.balance_sheet
         quarterly = ticker.quarterly_balance_sheet
         if annual is None or annual.empty:
@@ -86,8 +92,7 @@ def get_cashflow(symbol):
     """
     logger.info(f"get_cashflow | symbol={symbol}")
     try:
-        import yfinance as yf
-        ticker = yf.Ticker(f"{symbol}.NS")
+        ticker = _yf.Ticker(f"{symbol}.NS", session=_SESSION)
         annual = ticker.cashflow
         quarterly = ticker.quarterly_cashflow
         if annual is None or annual.empty:
