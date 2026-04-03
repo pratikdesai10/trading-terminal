@@ -11,7 +11,7 @@ nsetools==2.0.1
 nsepython==2.97
 
 # Global/Fundamental Data
-yfinance==0.2.54
+yfinance==0.2.65
 curl_cffi==0.13.0
 
 # Technical Analysis
