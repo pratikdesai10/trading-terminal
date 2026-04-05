@@ -87,7 +87,11 @@ def _render_statement(symbol, stmt_type, period_key):
     fetch_fn, row_filter = fetch_map[stmt_type]
 
     with st.spinner("Loading..."):
-        data = fetch_fn(symbol)
+        try:
+            data = fetch_fn(symbol)
+        except Exception as e:
+            logger.warning(f"m05 | {stmt_type} fetch failed for {symbol}: {e}")
+            data = None
 
     if data is None:
         st.warning(f"No {stmt_type} data available for {symbol}")
@@ -176,7 +180,11 @@ def _render_ratios(symbol):
     from data.fundamentals import get_company_info
 
     with st.spinner("Loading ratios..."):
-        info = get_company_info(symbol)
+        try:
+            info = get_company_info(symbol)
+        except Exception as e:
+            logger.warning(f"m05 | ratios fetch failed for {symbol}: {e}")
+            info = None
 
     if info is None:
         st.warning(f"No ratio data available for {symbol}")

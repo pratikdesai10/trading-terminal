@@ -151,19 +151,47 @@ def _render_controls():
         )
     with c_add:
         if st.button("ADD", use_container_width=True):
-            new_holding = {
-                "symbol": symbol,
-                "qty": int(qty),
-                "avg_price": float(avg_price),
-                "buy_date": buy_date.isoformat(),
-            }
-            from data.database import save_holding
-            new_holding["_db_id"] = save_holding(user_id, new_holding)
-            st.session_state[_STATE_KEY].append(new_holding)
-            logger.info(
-                f"m10_portfolio | ADD | {symbol} qty={qty} "
-                f"avg={avg_price} date={buy_date}"
+            holdings = st.session_state[_STATE_KEY]
+            existing_idx = next(
+                (i for i, h in enumerate(holdings) if h["symbol"] == symbol),
+                None,
             )
+
+            if existing_idx is not None:
+                # Merge with weighted average price
+                existing = holdings[existing_idx]
+                old_qty = int(existing["qty"])
+                old_avg = float(existing["avg_price"])
+                add_qty = int(qty)
+                add_avg = float(avg_price)
+                merged_qty = old_qty + add_qty
+                merged_avg = (old_qty * old_avg + add_qty * add_avg) / merged_qty
+
+                from data.database import update_holding_qty_and_price
+                update_holding_qty_and_price(
+                    user_id, existing["_db_id"], merged_qty, merged_avg,
+                )
+                existing["qty"] = merged_qty
+                existing["avg_price"] = merged_avg
+                logger.info(
+                    f"m10_portfolio | ADD (MERGE) | {symbol} "
+                    f"old_qty={old_qty} add_qty={add_qty} merged_qty={merged_qty} "
+                    f"old_avg={old_avg:.2f} merged_avg={merged_avg:.2f}"
+                )
+            else:
+                new_holding = {
+                    "symbol": symbol,
+                    "qty": int(qty),
+                    "avg_price": float(avg_price),
+                    "buy_date": buy_date.isoformat(),
+                }
+                from data.database import save_holding
+                new_holding["_db_id"] = save_holding(user_id, new_holding)
+                st.session_state[_STATE_KEY].append(new_holding)
+                logger.info(
+                    f"m10_portfolio | ADD | {symbol} qty={qty} "
+                    f"avg={avg_price} date={buy_date}"
+                )
             st.rerun()
 
     with c_browse:

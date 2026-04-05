@@ -16,7 +16,11 @@ def render():
 
     from data.fundamentals import get_company_info
     with st.spinner("Loading company data..."):
-        info = get_company_info(symbol)
+        try:
+            info = get_company_info(symbol)
+        except Exception as e:
+            logger.warning(f"m04 | get_company_info failed for {symbol}: {e}")
+            info = None
 
     if info is None:
         st.warning(f"No data available for {symbol}. yfinance may be rate-limited.")

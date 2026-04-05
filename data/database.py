@@ -233,6 +233,20 @@ def update_holding_qty(user_id, row_id, new_qty):
         logger.error(f"database | update_holding_qty failed: {e}")
 
 
+def update_holding_qty_and_price(user_id, row_id, new_qty, new_avg_price):
+    """Update both qty and avg_price for a holding (used when merging adds)."""
+    try:
+        with _db() as conn:
+            conn.execute(
+                "UPDATE portfolio_holdings SET qty = ?, avg_price = ? "
+                "WHERE id = ? AND user_id = ?",
+                (new_qty, new_avg_price, row_id, user_id),
+            )
+            conn.commit()
+    except sqlite3.Error as e:
+        logger.error(f"database | update_holding_qty_and_price failed: {e}")
+
+
 def replace_all_holdings(user_id, holdings):
     """Replace all holdings for a user (for JSON import). Runs in a transaction."""
     try:

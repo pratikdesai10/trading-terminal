@@ -18,11 +18,17 @@ def render():
     st.markdown("### FII / DII FLOW TRACKER")
 
     with st.spinner("Loading FII/DII data..."):
-        data = _fetch_fii_dii_data()
+        result = _fetch_fii_dii_data()
 
-    if not data:
-        st.warning("FII/DII data not available. NSE may have restricted access.")
+    if not result or not result.get("records"):
+        st.warning(
+            "FII/DII data not available. All upstream sources "
+            "(NSE, nsepython, Moneycontrol) are currently unreachable."
+        )
         return
+
+    data = result["records"]
+    source = result.get("source", "unknown")
 
     # ── Summary metrics ──
     st.divider()
@@ -35,60 +41,158 @@ def render():
     st.divider()
 
     # ── Data table ──
-    _render_data_table(data)
+    _render_data_table(data, source=source)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_fii_dii_data():
-    """Fetch FII/DII activity data from NSE.
+    """Fetch FII/DII activity with a multi-source fallback chain.
 
-    Returns a list of dicts with keys: date, category, buyValue, sellValue, netValue.
+    Returns {"records": [...], "source": "nse" | "nsepython" | "moneycontrol"}
+    or None if every source fails. Each record has keys: date, category,
+    buyValue, sellValue, netValue.
     """
-    logger.info("m14_fii_dii | fetching from NSE API")
-
-    try:
+    for source_name, fetcher in (
+        ("nse", _fetch_from_nse),
+        ("nsepython", _fetch_from_nsepython),
+        ("moneycontrol", _fetch_from_moneycontrol),
+    ):
         try:
-            from curl_cffi import requests as _curl_req
-            s = _curl_req.Session(impersonate="chrome")
-        except Exception:
-            s = requests.Session()
-            s.headers.update({
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "application/json",
-                "Accept-Language": "en-US,en;q=0.9",
-            })
-        # Hit main page first to get cookies
-        s.get("https://www.nseindia.com", timeout=10)
+            records = fetcher()
+        except Exception as e:
+            logger.warning(f"m14_fii_dii | source={source_name} | FAIL {type(e).__name__}: {e}")
+            continue
+        if records:
+            logger.info(f"m14_fii_dii | source={source_name} | OK | {len(records)} records")
+            return {"records": records, "source": source_name}
+        logger.warning(f"m14_fii_dii | source={source_name} | empty")
+    return None
 
-        r = s.get("https://www.nseindia.com/api/fiidiiTradeReact", timeout=10)
-        if r.status_code != 200:
-            logger.warning(f"m14_fii_dii | NSE API returned {r.status_code}")
-            return None
 
-        raw = r.json()
-        if not raw or not isinstance(raw, list):
-            logger.warning("m14_fii_dii | empty or invalid response")
-            return None
+def _build_nse_session():
+    """Build a browser-impersonating session with NSE-friendly headers."""
+    try:
+        from curl_cffi import requests as _curl_req
+        s = _curl_req.Session(impersonate="chrome")
+    except Exception:
+        s = requests.Session()
+    s.headers.update({
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Referer": "https://www.nseindia.com/reports/fii-dii",
+        "X-Requested-With": "XMLHttpRequest",
+    })
+    return s
 
-        # Parse into structured records
-        records = []
-        for item in raw:
-            cat = item.get("category", "")
-            records.append({
-                "category": "FII" if "FII" in cat or "FPI" in cat else "DII",
-                "date": item.get("date", ""),
-                "buyValue": _parse_num(item.get("buyValue", "0")),
-                "sellValue": _parse_num(item.get("sellValue", "0")),
-                "netValue": _parse_num(item.get("netValue", "0")),
-            })
 
-        logger.info(f"m14_fii_dii | OK | {len(records)} records")
-        return records
+def _fetch_from_nse():
+    """Primary source: NSE JSON API with cookie priming and one 403 retry."""
+    s = _build_nse_session()
+    # Prime cookies from homepage and the FII/DII landing page
+    s.get("https://www.nseindia.com/", timeout=15)
+    s.get("https://www.nseindia.com/reports/fii-dii", timeout=15)
 
-    except Exception as e:
-        logger.error(f"m14_fii_dii | {type(e).__name__}: {e}")
-        return None
+    api_url = "https://www.nseindia.com/api/fiidiiTradeReact"
+    r = s.get(api_url, timeout=15)
+    if r.status_code in (401, 403):
+        # Re-prime and retry once
+        s.get("https://www.nseindia.com/", timeout=15)
+        r = s.get(api_url, timeout=15)
+    if r.status_code != 200:
+        raise RuntimeError(f"NSE API returned {r.status_code}")
+
+    raw = r.json()
+    if not raw or not isinstance(raw, list):
+        raise RuntimeError("NSE API empty or invalid response")
+
+    return [_normalize_record(item) for item in raw]
+
+
+def _fetch_from_nsepython():
+    """Fallback: nsepython library uses a different endpoint/scrape strategy."""
+    from nsepython import fii_dii_data  # type: ignore
+
+    raw = fii_dii_data()
+    if raw is None:
+        raise RuntimeError("nsepython returned None")
+    if hasattr(raw, "to_dict"):
+        raw = raw.to_dict(orient="records")
+    if not isinstance(raw, list) or not raw:
+        raise RuntimeError("nsepython returned empty/invalid payload")
+
+    return [_normalize_record(item) for item in raw]
+
+
+def _fetch_from_moneycontrol():
+    """Fallback: Moneycontrol public FII/DII activity page via pandas.read_html."""
+    url = "https://www.moneycontrol.com/stocks/marketstats/fii_dii_activity/index.php"
+    tables = pd.read_html(url)
+    if not tables:
+        raise RuntimeError("moneycontrol returned no tables")
+
+    # Find the first table whose columns mention Buy and Sell values
+    for table in tables:
+        cols = [str(c).lower() for c in table.columns]
+        if any("buy" in c for c in cols) and any("sell" in c for c in cols):
+            df = table.copy()
+            break
+    else:
+        raise RuntimeError("moneycontrol layout changed, no buy/sell table found")
+
+    # Moneycontrol typically shows one row for FII and one for DII on a given date.
+    records = []
+    date_str = ""
+    for _, row in df.iterrows():
+        label = " ".join(str(v) for v in row.values).lower()
+        if "fii" in label or "fpi" in label:
+            category = "FII"
+        elif "dii" in label:
+            category = "DII"
+        else:
+            continue
+        buy = sell = net = 0.0
+        for col in df.columns:
+            col_lower = str(col).lower()
+            val = row[col]
+            if "gross purch" in col_lower or ("buy" in col_lower and "value" in col_lower):
+                buy = _parse_num(val)
+            elif "gross sale" in col_lower or ("sell" in col_lower and "value" in col_lower):
+                sell = _parse_num(val)
+            elif "net" in col_lower:
+                net = _parse_num(val)
+            elif "date" in col_lower and not date_str:
+                date_str = str(val)
+        if net == 0.0:
+            net = buy - sell
+        records.append({
+            "category": category,
+            "date": date_str,
+            "buyValue": buy,
+            "sellValue": sell,
+            "netValue": net,
+        })
+
+    if not records:
+        raise RuntimeError("moneycontrol rows did not contain FII/DII entries")
+    return records
+
+
+def _normalize_record(item):
+    """Normalize a raw NSE/nsepython dict into the shared record schema."""
+    cat = str(item.get("category", "") or "")
+    return {
+        "category": "FII" if "FII" in cat.upper() or "FPI" in cat.upper() else "DII",
+        "date": item.get("date", "") or "",
+        "buyValue": _parse_num(item.get("buyValue", 0)),
+        "sellValue": _parse_num(item.get("sellValue", 0)),
+        "netValue": _parse_num(item.get("netValue", 0)),
+    }
 
 
 def _parse_num(val):
@@ -222,7 +326,7 @@ def _render_daily_chart(data):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def _render_data_table(data):
+def _render_data_table(data, source="nse"):
     """Render FII/DII data as a styled table."""
     st.markdown("##### DAILY BREAKUP")
 
@@ -270,8 +374,14 @@ def _render_data_table(data):
     )
     st.markdown(html, unsafe_allow_html=True)
 
+    source_labels = {
+        "nse": "NSE India",
+        "nsepython": "NSE India (via nsepython)",
+        "moneycontrol": "Moneycontrol",
+    }
+    source_label = source_labels.get(source, source)
     st.markdown(
         f'<div style="color:{COLORS["muted"]};font-size:10px;margin-top:8px">'
-        f'Source: NSE India | Values in ₹ Crores | Updates daily after market hours'
+        f'Source: {source_label} | Values in ₹ Crores | Updates daily after market hours'
         f'</div>', unsafe_allow_html=True,
     )
