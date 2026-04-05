@@ -51,8 +51,11 @@ def get_stock_history(symbol, start_date=None, end_date=None):
         logger.info(f"get_stock_history | symbol={symbol} | OK via jugaad-data | {len(df)} rows")
         return df
 
+    # NOTE: raise instead of returning an empty DataFrame so st.cache_data does
+    # NOT memoize the failure. Empty DataFrames ARE cached (they are valid
+    # return values); exceptions are not. Callers must wrap in try/except.
     logger.error(f"get_stock_history | symbol={symbol} | ALL SOURCES FAILED")
-    return pd.DataFrame()
+    raise RuntimeError(f"get_stock_history: all sources failed for {symbol}")
 
 
 def _fetch_jugaad(symbol, start_date, end_date):
@@ -213,4 +216,4 @@ def get_index_history(index_name, start_date=None, end_date=None):
             logger.warning(f"get_index_history | index={index_name} | yfinance failed: {type(e).__name__}: {e}")
 
     logger.error(f"get_index_history | index={index_name} | ALL SOURCES FAILED")
-    return pd.DataFrame()
+    raise RuntimeError(f"get_index_history: all sources failed for {index_name}")

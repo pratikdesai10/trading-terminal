@@ -22,8 +22,8 @@ def render():
 
     if not result or not result.get("records"):
         st.warning(
-            "FII/DII data not available. All upstream sources "
-            "(NSE, nsepython, Moneycontrol) are currently unreachable."
+            "FII/DII data not available. Upstream sources "
+            "(NSE, Moneycontrol) are currently unreachable."
         )
         return
 
@@ -48,13 +48,16 @@ def render():
 def _fetch_fii_dii_data():
     """Fetch FII/DII activity with a multi-source fallback chain.
 
-    Returns {"records": [...], "source": "nse" | "nsepython" | "moneycontrol"}
-    or None if every source fails. Each record has keys: date, category,
-    buyValue, sellValue, netValue.
+    Returns {"records": [...], "source": "nse" | "moneycontrol"} or None if
+    every source fails. Each record has keys: date, category, buyValue,
+    sellValue, netValue.
+
+    NOTE: `nsepython.nse_fiidii()` internally calls the same
+    `/api/fiidiiTradeReact` endpoint as our primary NSE fetcher, so it cannot
+    bypass a cloud-IP 403 — it is intentionally omitted from the chain.
     """
     for source_name, fetcher in (
         ("nse", _fetch_from_nse),
-        ("nsepython", _fetch_from_nsepython),
         ("moneycontrol", _fetch_from_moneycontrol),
     ):
         try:
@@ -114,62 +117,93 @@ def _fetch_from_nse():
     return [_normalize_record(item) for item in raw]
 
 
-def _fetch_from_nsepython():
-    """Fallback: nsepython library uses a different endpoint/scrape strategy."""
-    from nsepython import fii_dii_data  # type: ignore
-
-    raw = fii_dii_data()
-    if raw is None:
-        raise RuntimeError("nsepython returned None")
-    if hasattr(raw, "to_dict"):
-        raw = raw.to_dict(orient="records")
-    if not isinstance(raw, list) or not raw:
-        raise RuntimeError("nsepython returned empty/invalid payload")
-
-    return [_normalize_record(item) for item in raw]
-
-
 def _fetch_from_moneycontrol():
-    """Fallback: Moneycontrol public FII/DII activity page via pandas.read_html."""
-    url = "https://www.moneycontrol.com/stocks/marketstats/fii_dii_activity/index.php"
-    tables = pd.read_html(url)
-    if not tables:
-        raise RuntimeError("moneycontrol returned no tables")
+    """Fallback: Moneycontrol FII/DII activity page.
 
-    # Find the first table whose columns mention Buy and Sell values
-    for table in tables:
-        cols = [str(c).lower() for c in table.columns]
-        if any("buy" in c for c in cols) and any("sell" in c for c in cols):
-            df = table.copy()
+    Fetches the page with curl_cffi (Chrome impersonation + real UA avoids
+    Moneycontrol's basic bot filter) and parses the HTML with BeautifulSoup +
+    lxml. Both `bs4` and `lxml` are pulled in transitively by yfinance and are
+    also declared explicitly in requirements.txt so we do not depend on
+    `pandas.read_html` (which needs `html5lib` or `lxml` at a parser level that
+    is not always resolvable on Streamlit Cloud).
+    """
+    from bs4 import BeautifulSoup
+
+    try:
+        from curl_cffi import requests as _curl_req
+        s = _curl_req.Session(impersonate="chrome")
+    except Exception:
+        s = requests.Session()
+    s.headers.update({
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+    })
+
+    url = "https://www.moneycontrol.com/stocks/marketstats/fii_dii_activity/index.php"
+    r = s.get(url, timeout=15)
+    if r.status_code != 200:
+        raise RuntimeError(f"moneycontrol HTTP {r.status_code}")
+
+    soup = BeautifulSoup(r.text, "lxml")
+    target_table = None
+    for table in soup.find_all("table"):
+        header_cells = table.find_all("th")
+        headers = " ".join(c.get_text(" ", strip=True).lower() for c in header_cells)
+        if "buy" in headers and "sell" in headers:
+            target_table = table
             break
-    else:
+    if target_table is None:
         raise RuntimeError("moneycontrol layout changed, no buy/sell table found")
 
-    # Moneycontrol typically shows one row for FII and one for DII on a given date.
+    header_cells = target_table.find_all("th")
+    headers = [c.get_text(" ", strip=True).lower() for c in header_cells]
+
+    def _col_index(*needles):
+        for idx, h in enumerate(headers):
+            if all(n in h for n in needles):
+                return idx
+        return None
+
+    idx_date = _col_index("date")
+    idx_buy = _col_index("gross", "purch")
+    if idx_buy is None:
+        idx_buy = _col_index("buy")
+    idx_sell = _col_index("gross", "sale")
+    if idx_sell is None:
+        idx_sell = _col_index("sell")
+    idx_net = _col_index("net")
+
     records = []
-    date_str = ""
-    for _, row in df.iterrows():
-        label = " ".join(str(v) for v in row.values).lower()
-        if "fii" in label or "fpi" in label:
+    for tr in target_table.find_all("tr"):
+        tds = tr.find_all("td")
+        if not tds:
+            continue
+        row_text = " ".join(td.get_text(" ", strip=True) for td in tds).lower()
+        if "fii" in row_text or "fpi" in row_text:
             category = "FII"
-        elif "dii" in label:
+        elif "dii" in row_text:
             category = "DII"
         else:
             continue
-        buy = sell = net = 0.0
-        for col in df.columns:
-            col_lower = str(col).lower()
-            val = row[col]
-            if "gross purch" in col_lower or ("buy" in col_lower and "value" in col_lower):
-                buy = _parse_num(val)
-            elif "gross sale" in col_lower or ("sell" in col_lower and "value" in col_lower):
-                sell = _parse_num(val)
-            elif "net" in col_lower:
-                net = _parse_num(val)
-            elif "date" in col_lower and not date_str:
-                date_str = str(val)
+
+        def _cell(i):
+            if i is None or i >= len(tds):
+                return ""
+            return tds[i].get_text(" ", strip=True)
+
+        buy = _parse_num(_cell(idx_buy))
+        sell = _parse_num(_cell(idx_sell))
+        net = _parse_num(_cell(idx_net)) if idx_net is not None else (buy - sell)
         if net == 0.0:
             net = buy - sell
+        date_str = _cell(idx_date) if idx_date is not None else ""
+
         records.append({
             "category": category,
             "date": date_str,
@@ -376,7 +410,6 @@ def _render_data_table(data, source="nse"):
 
     source_labels = {
         "nse": "NSE India",
-        "nsepython": "NSE India (via nsepython)",
         "moneycontrol": "Moneycontrol",
     }
     source_label = source_labels.get(source, source)

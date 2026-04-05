@@ -204,7 +204,12 @@ def _fetch_returns(symbols, days):
     failed = []
 
     for sym in symbols:
-        df = get_stock_history(sym, start, end)
+        try:
+            df = get_stock_history(sym, start, end)
+        except Exception as e:
+            logger.warning(f"m12_optimizer | {sym} | fetch failed: {type(e).__name__}: {e}")
+            failed.append(sym)
+            continue
         if df is not None and not df.empty and len(df) > 5:
             series = df.set_index("Date")["Close"]
             series = series[~series.index.duplicated(keep="last")]

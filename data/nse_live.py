@@ -221,28 +221,93 @@ def get_stock_quote(symbol):
 
 
 def _shape_index_row(index_name, data):
-    """Given a live-index payload, locate the index row and shape the result dict."""
-    for item in data.get("data", []):
-        if item.get("symbol") == index_name or item.get("identifier") == index_name:
-            adv_data = data.get("advance") or {}
-            return {
-                "indexName": index_name,
-                "last": _safe_float(item.get("lastPrice", item.get("last", 0))),
-                "change": _safe_float(item.get("change", item.get("variation", 0))),
-                "pChange": _safe_float(item.get("pChange", item.get("percentChange", 0))),
-                "open": _safe_float(item.get("open", 0)),
-                "high": _safe_float(item.get("dayHigh", item.get("high", 0))),
-                "low": _safe_float(item.get("dayLow", item.get("low", 0))),
-                "previousClose": _safe_float(item.get("previousClose", 0)),
-                "advances": _safe_int(adv_data.get("advances", 0)),
-                "declines": _safe_int(adv_data.get("declines", 0)),
-                "unchanged": _safe_int(adv_data.get("unchanged", 0)),
-            }
-    return None
+    """Given a live-index payload, locate the index row and shape the result dict.
+
+    Matching strategy:
+    1. Case-insensitive match on `symbol` / `identifier` / `index` / `indexSymbol`.
+    2. If no match, fall back to `data[0]` — on NSE's equity-stockIndices
+       endpoint the first row is always the index itself, even when its symbol
+       field uses a slightly different string than the query parameter.
+    """
+    rows = data.get("data", []) or []
+    target = (index_name or "").strip().lower()
+    match = None
+    for item in rows:
+        for key in ("symbol", "identifier", "index", "indexSymbol"):
+            val = item.get(key)
+            if isinstance(val, str) and val.strip().lower() == target:
+                match = item
+                break
+        if match is not None:
+            break
+
+    if match is None and rows:
+        # Fallback: first row is the index summary on equity-stockIndices
+        first = rows[0]
+        logger.info(
+            f"_shape_index_row | {index_name} | no exact match, using data[0] "
+            f"keys={list(first.keys())[:12]}"
+        )
+        match = first
+
+    if match is None:
+        logger.warning(f"_shape_index_row | {index_name} | empty data[] payload")
+        return None
+
+    adv_data = data.get("advance") or {}
+    return {
+        "indexName": index_name,
+        "last": _safe_float(
+            match.get("last", match.get("lastPrice", match.get("last_price", match.get("value", 0))))
+        ),
+        "change": _safe_float(match.get("change", match.get("variation", 0))),
+        "pChange": _safe_float(
+            match.get("pChange", match.get("percentChange", match.get("percChange", 0)))
+        ),
+        "open": _safe_float(match.get("open", 0)),
+        "high": _safe_float(match.get("dayHigh", match.get("high", 0))),
+        "low": _safe_float(match.get("dayLow", match.get("low", 0))),
+        "previousClose": _safe_float(match.get("previousClose", match.get("prevClose", 0))),
+        "advances": _safe_int(adv_data.get("advances", 0)),
+        "declines": _safe_int(adv_data.get("declines", 0)),
+        "unchanged": _safe_int(adv_data.get("unchanged", 0)),
+    }
+
+
+def _fetch_vix_via_all_indices():
+    """Fetch INDIA VIX from NSE's /api/allIndices endpoint.
+
+    /api/equity-stockIndices only supports indices with constituents, so VIX
+    (which has none) must come from the list-all endpoint. We normalize the
+    response into the same {"data": [...]} shape that `_shape_index_row`
+    expects so downstream logic is unchanged.
+    """
+    raw = _nse_api_get("/api/allIndices", label="allIndices(VIX)")
+    all_rows = raw.get("data", []) or []
+    vix_row = None
+    for item in all_rows:
+        key_val = (
+            item.get("index") or item.get("indexSymbol") or item.get("symbol") or ""
+        ).strip().lower()
+        if key_val == "india vix":
+            vix_row = item
+            break
+    if vix_row is None:
+        raise RuntimeError("allIndices: INDIA VIX row not found")
+    return {"data": [vix_row], "advance": {}}
 
 
 def _fetch_live_index(index_name):
     """Fetch a live index payload, trying direct NSE first then jugaad-data."""
+    # VIX has no constituents — equity-stockIndices 400s on it, so route
+    # through allIndices instead.
+    if (index_name or "").strip().upper() == "INDIA VIX":
+        try:
+            return _fetch_vix_via_all_indices()
+        except Exception as e:
+            logger.warning(f"live_index | INDIA VIX | allIndices failed: {type(e).__name__}: {e}")
+            # fall through to jugaad-data fallback
+
     # Primary: direct NSE
     try:
         return _nse_fetch_index(index_name)
@@ -278,24 +343,63 @@ def get_index_quote(index_name):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_market_breadth(index_name="NIFTY 500"):
-    """Get market breadth (advances, declines, unchanged) for an index."""
+    """Get market breadth (advances, declines, unchanged) for an index.
+
+    Reads the top-level ``advance`` block when NSE provides it; otherwise
+    computes breadth manually by counting constituent rows by sign of
+    ``pChange``. This protects against NSE schema drift where the summary
+    block is missing or zeroed.
+    """
     logger.info(f"get_market_breadth | fetching {index_name} breadth")
+    data = None
     try:
         data = _fetch_live_index(index_name)
-        if data and "advance" in data:
-            adv = data["advance"]
-            result = {
-                "advances": _safe_int(adv.get("advances", 0)),
-                "declines": _safe_int(adv.get("declines", 0)),
-                "unchanged": _safe_int(adv.get("unchanged", 0)),
-            }
+    except Exception as e:
+        logger.error(f"get_market_breadth | {index_name} | FAILED: {type(e).__name__}: {e}")
+
+    if data:
+        adv = data.get("advance") or {}
+        result = {
+            "advances": _safe_int(adv.get("advances", 0)),
+            "declines": _safe_int(adv.get("declines", 0)),
+            "unchanged": _safe_int(adv.get("unchanged", 0)),
+        }
+        total = result["advances"] + result["declines"] + result["unchanged"]
+        if total > 0:
             logger.info(
-                f"get_market_breadth | {index_name} | OK | "
+                f"get_market_breadth | {index_name} | OK via summary | "
                 f"adv={result['advances']} dec={result['declines']} unc={result['unchanged']}"
             )
             return result
-    except Exception as e:
-        logger.error(f"get_market_breadth | {index_name} | FAILED: {type(e).__name__}: {e}")
+
+        # Summary missing or zeroed — compute manually from constituents.
+        rows = data.get("data", []) or []
+        manual = {"advances": 0, "declines": 0, "unchanged": 0}
+        target_lower = (index_name or "").strip().lower()
+        for item in rows:
+            sym = (item.get("symbol") or "").strip()
+            if sym.lower() == target_lower:
+                # Skip the index summary row itself
+                continue
+            pchg = item.get("pChange")
+            if pchg is None:
+                pchg = item.get("percentChange", 0)
+            try:
+                pchg_val = float(pchg)
+            except (ValueError, TypeError):
+                continue
+            if pchg_val > 0:
+                manual["advances"] += 1
+            elif pchg_val < 0:
+                manual["declines"] += 1
+            else:
+                manual["unchanged"] += 1
+        if sum(manual.values()) > 0:
+            logger.info(
+                f"get_market_breadth | {index_name} | OK via manual count | "
+                f"adv={manual['advances']} dec={manual['declines']} unc={manual['unchanged']}"
+            )
+            return manual
 
     # Fallback: try NIFTY 50 if broader index failed
     if index_name != "NIFTY 50":

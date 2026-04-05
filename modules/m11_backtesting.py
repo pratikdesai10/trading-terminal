@@ -263,7 +263,15 @@ def _run_backtest(symbol, strategy_name, params, start_date, end_date,
     with st.spinner(f"Fetching {symbol} data and running {strategy_name}..."):
         from data.nse_historical import get_stock_history
 
-        df = get_stock_history(symbol, start_date, end_date)
+        try:
+            df = get_stock_history(symbol, start_date, end_date)
+        except Exception as e:
+            logger.warning(f"m11_backtest | {symbol} | fetch failed: {type(e).__name__}: {e}")
+            st.warning(
+                f"No historical data available for {symbol}. "
+                "Market data sources may be rate-limited — try again in a moment."
+            )
+            return
         if df is None or df.empty:
             st.error(f"No historical data available for {symbol}. Try a different date range.")
             return

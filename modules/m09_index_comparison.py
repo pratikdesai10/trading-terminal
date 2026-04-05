@@ -91,7 +91,11 @@ def _fetch_data(symbols, start_date, end_date, is_index=False):
 
     data = {}
     for sym in symbols:
-        df = fetch_fn(sym, start_date, end_date)
+        try:
+            df = fetch_fn(sym, start_date, end_date)
+        except Exception as e:
+            logger.warning(f"m09_index_comparison | {sym} | fetch failed: {type(e).__name__}: {e}")
+            continue
         if df is not None and not df.empty and len(df) > 1:
             data[sym] = df
     return data
