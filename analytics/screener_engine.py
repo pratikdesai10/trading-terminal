@@ -56,9 +56,11 @@ def fetch_screener_data(symbols, sectors):
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
+    from data.fundamentals import _yf_call_with_backoff
+
     def _fetch_single(symbol):
         ticker = _yf.Ticker(f"{symbol}.NS", session=_SESSION)
-        info = ticker.info or {}
+        info = _yf_call_with_backoff(lambda: ticker.info, label=f"screener_info({symbol})") or {}
         if not info.get("currentPrice") and not info.get("regularMarketPrice"):
             return None
         price = info.get("currentPrice") or info.get("regularMarketPrice", 0)

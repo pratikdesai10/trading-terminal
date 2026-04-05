@@ -251,13 +251,17 @@ def _fetch_screener_data(universe="Nifty 50", selected_sectors_tuple=None):
         tickers_ns = [f"{s}.NS" for s in df["Symbol"].tolist()]
 
         try:
-            batch = yf.download(
-                tickers_ns,
-                start=start.strftime("%Y-%m-%d"),
-                end=end.strftime("%Y-%m-%d"),
-                progress=False,
-                threads=True,
-                session=_session,
+            from data.fundamentals import _yf_call_with_backoff
+            batch = _yf_call_with_backoff(
+                lambda: yf.download(
+                    tickers_ns,
+                    start=start.strftime("%Y-%m-%d"),
+                    end=end.strftime("%Y-%m-%d"),
+                    progress=False,
+                    threads=True,
+                    session=_session,
+                ),
+                label=f"screener_batch({len(tickers_ns)})",
             )
             if batch is not None and not batch.empty:
                 close_data = batch["Close"] if "Close" in batch.columns else batch.get("Adj Close")

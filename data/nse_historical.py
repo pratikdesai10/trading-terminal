@@ -98,9 +98,13 @@ def _fetch_jugaad(symbol, start_date, end_date):
 
 def _fetch_yfinance(symbol, start_date, end_date):
     """Fetch from yfinance as fallback."""
+    from data.fundamentals import _yf_call_with_backoff
     try:
         ticker = _yf.Ticker(f"{symbol}.NS", session=_SESSION)
-        df = ticker.history(start=str(start_date), end=str(end_date))
+        df = _yf_call_with_backoff(
+            lambda: ticker.history(start=str(start_date), end=str(end_date)),
+            label=f"history({symbol})",
+        )
         if df is not None and not df.empty:
             # yfinance may return MultiIndex columns for single-ticker downloads
             # (e.g. ("Close", "ABB.NS")) — flatten to simple column names
@@ -188,9 +192,13 @@ def get_index_history(index_name, start_date=None, end_date=None):
     }
     yf_symbol = yf_map.get(index_name)
     if yf_symbol:
+        from data.fundamentals import _yf_call_with_backoff
         try:
             ticker = _yf.Ticker(yf_symbol, session=_SESSION)
-            df = ticker.history(start=str(start_date), end=str(end_date))
+            df = _yf_call_with_backoff(
+                lambda: ticker.history(start=str(start_date), end=str(end_date)),
+                label=f"index_history({index_name})",
+            )
             if df is not None and not df.empty:
                 df = df.reset_index()
                 if "Date" in df.columns:
